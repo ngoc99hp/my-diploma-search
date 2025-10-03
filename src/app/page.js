@@ -1,70 +1,102 @@
 "use client";
 
 import { useState } from "react";
-import { debounce } from "lodash";
-import { IMaskInput } from "react-imask";
+import Captcha from "@/components/Captcha";
 
 export default function Home() {
-  const [fullName, setFullName] = useState("");
-  const [birthDate, setBirthDate] = useState("");
+  const [diplomaNumber, setDiplomaNumber] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState(null);
+  const [captchaError, setCaptchaError] = useState(null);
 
-  // Hàm kiểm tra định dạng ngày hợp lệ (DD/MM/YYYY)
-  const isValidDate = (dateString) => {
-    const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
-    if (!regex.test(dateString)) return false;
-
-    const [day, month, year] = dateString.split("/").map(Number);
-    const date = new Date(year, month - 1, day);
-    return (
-      date.getDate() === day &&
-      date.getMonth() === month - 1 &&
-      date.getFullYear() === year &&
-      year >= 1900 &&
-      year <= new Date().getFullYear()
-    );
+  const handleCaptchaVerify = (token) => {
+    setCaptchaToken(token);
+    setCaptchaError(null);
+    console.log("✅ Captcha verified:", token);
   };
 
-  const handleSubmit = debounce(async (e) => {
+  const handleCaptchaError = (error) => {
+    console.error("❌ Captcha error:", error);
+    setCaptchaError("Xác thực Captcha thất bại. Vui lòng thử lại.");
+    setCaptchaToken(null);
+  };
+
+  const handleCaptchaExpire = () => {
+    console.log("⏱️ Captcha expired");
+    setCaptchaToken(null);
+    setCaptchaError("Captcha đã hết hạn. Vui lòng xác thực lại.");
+  };
+
+  const handleSubmit = async (e) => {
     if (e) e.preventDefault();
 
-    if (!fullName.trim() || !birthDate.trim()) {
-      setError("Vui lòng nhập đầy đủ thông tin");
+    // Validate diploma number
+    if (!diplomaNumber.trim()) {
+      setError("Vui lòng nhập số hiệu bằng tốt nghiệp");
       return;
     }
 
-    if (!isValidDate(birthDate)) {
-      setError("Ngày sinh không hợp lệ. Vui lòng nhập theo định dạng DD/MM/YYYY");
+    // Check captcha (skip if disabled in development)
+    if (process.env.NEXT_PUBLIC_DISABLE_CAPTCHA !== 'true' && !captchaToken) {
+      setCaptchaError("Vui lòng xác thực Captcha trước khi tra cứu");
       return;
     }
 
     setLoading(true);
     setError(null);
     setResult(null);
+    setShowDetail(false);
 
     try {
-      const [day, month, year] = birthDate.split("/");
-      const apiBirthDate = `${year}-${month}-${day}`;
+      // Step 1: Verify captcha first (if enabled)
+      if (process.env.NEXT_PUBLIC_DISABLE_CAPTCHA !== 'true') {
+        const captchaVerify = await fetch("/api/verify-captcha", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: captchaToken }),
+        });
 
+        const captchaData = await captchaVerify.json();
+
+        if (!captchaData.success) {
+          setCaptchaError(captchaData.message || "Xác thực Captcha thất bại");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Step 2: Search diploma
       const response = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, birthDate: apiBirthDate }),
+        body: JSON.stringify({ 
+          diplomaNumber: diplomaNumber.trim(),
+          captchaToken: captchaToken
+        }),
       });
+
       const data = await response.json();
-      if (response.ok) {
-        setResult(data);
+
+      if (response.ok && data.success) {
+        setResult(data.data);
+        setCaptchaError(null);
+      } else if (response.status === 429) {
+        setError(data.message || "Bạn đã vượt quá số lần tra cứu cho phép. Vui lòng thử lại sau.");
       } else {
-        setError(data.message || "Không tìm thấy thông tin");
+        setError(data.message || "Không có số hiệu bằng Tốt nghiệp này!");
       }
     } catch (err) {
+      console.error("Search error:", err);
       setError("Đã có lỗi xảy ra, vui lòng thử lại");
     } finally {
       setLoading(false);
+      // Reset captcha token after search (user needs to verify again for next search)
+      setCaptchaToken(null);
     }
-  }, 300);
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return "Chưa cập nhật";
@@ -85,7 +117,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      {/* Container chính */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
@@ -93,7 +124,10 @@ export default function Home() {
             <h1 className="text-2xl font-bold text-gray-800 mb-2">
               Hệ thống tra cứu văn bằng
             </h1>
-            <div className="h-0.5 bg-gradient-to-r from-[#0083c2] to-transparent"></div>
+            <p className="text-sm text-gray-600">
+              Trường Đại học Quản lý và Công nghệ Hải Phòng
+            </p>
+            <div className="h-0.5 bg-gradient-to-r from-[#0083c2] to-transparent mt-2"></div>
           </div>
         </div>
 
@@ -106,40 +140,57 @@ export default function Home() {
           </div>
 
           <div className="px-6 py-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Họ và tên
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0083c2] focus:border-[#0083c2] transition-colors"
-                  placeholder="Nhập họ và tên đầy đủ"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ngày sinh
-                </label>
-                <IMaskInput
-                  mask="00/00/0000"
-                  value={birthDate}
-                  onAccept={(value) => setBirthDate(value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0083c2] focus:border-[#0083c2] transition-colors"
-                  placeholder="DD/MM/YYYY"
-                />
-              </div>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Số hiệu bằng tốt nghiệp <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={diplomaNumber}
+                onChange={(e) => setDiplomaNumber(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#0083c2] focus:border-[#0083c2] transition-colors"
+                placeholder="Nhập số hiệu bằng tốt nghiệp"
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Ví dụ: 123456, ABC-2023-001, v.v.
+              </p>
             </div>
 
-            <div className="mt-6">
+            {/* Captcha Widget */}
+            <div className="mb-6">
+              <Captcha
+                onVerify={handleCaptchaVerify}
+                onError={handleCaptchaError}
+                onExpire={handleCaptchaExpire}
+              />
+              {captchaError && (
+                <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3">
+                  <p className="text-sm text-red-700 flex items-start">
+                    <svg
+                      className="h-5 w-5 text-red-400 mr-2 mt-0.5 flex-shrink-0"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    {captchaError}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
                 onClick={handleSubmit}
                 disabled={loading}
-                className="w-full md:w-auto px-6 py-2 bg-[#0083c2] text-white font-medium rounded-md hover:bg-[#0066a0] focus:outline-none focus:ring-2 focus:ring-[#0083c2] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-6 py-3 bg-[#0083c2] text-white font-medium rounded-md hover:bg-[#0066a0] focus:outline-none focus:ring-2 focus:ring-[#0083c2] focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {loading ? (
                   <div className="flex items-center justify-center">
@@ -147,31 +198,48 @@ export default function Home() {
                     Đang tìm kiếm...
                   </div>
                 ) : (
-                  "Tra cứu thông tin"
+                  <div className="flex items-center justify-center">
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                      />
+                    </svg>
+                    Tra cứu thông tin
+                  </div>
                 )}
               </button>
+
+              {diplomaNumber && !loading && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiplomaNumber("");
+                    setResult(null);
+                    setError(null);
+                    setShowDetail(false);
+                    setCaptchaToken(null);
+                    setCaptchaError(null);
+                  }}
+                  className="px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 transition-colors"
+                >
+                  Xóa
+                </button>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Loading state */}
-        {loading && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-800">
-                Kết quả tra cứu
-              </h2>
-            </div>
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0083c2] mb-4"></div>
-              <p className="text-gray-600">Đang tải thông tin...</p>
-            </div>
-          </div>
-        )}
-
         {/* Error message */}
         {error && !loading && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-800">
                 Kết quả tra cứu
@@ -179,9 +247,9 @@ export default function Home() {
             </div>
             <div className="px-6 py-8">
               <div className="bg-red-50 border border-red-200 rounded-md p-4">
-                <div className="flex items-center">
+                <div className="flex items-start">
                   <svg
-                    className="h-5 w-5 text-red-400 mr-2"
+                    className="h-5 w-5 text-red-400 mr-3 mt-0.5 flex-shrink-0"
                     fill="currentColor"
                     viewBox="0 0 20 20"
                   >
@@ -191,7 +259,12 @@ export default function Home() {
                       clipRule="evenodd"
                     />
                   </svg>
-                  <p className="text-red-700 font-medium">{error}</p>
+                  <div>
+                    <p className="text-red-700 font-medium">{error}</p>
+                    <p className="text-red-600 text-sm mt-1">
+                      Vui lòng kiểm tra lại số hiệu bằng và thử lại
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -200,7 +273,7 @@ export default function Home() {
 
         {/* Success result */}
         {result && !loading && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-800">
                 Kết quả tra cứu
@@ -209,35 +282,11 @@ export default function Home() {
             </div>
 
             <div className="px-6 py-6">
-              {/* Thông tin trường học */}
-              <div className="mb-8">
-                <h3 className="text-md font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
-                  Thông tin trường học
-                </h3>
-                <div className="space-y-0">
-                  {renderField("Tên trường", result.school_name)}
-                  {renderField("Ngành đào tạo", result.major)}
-                  {renderField("Chuyên ngành", result.specialization)}
-                </div>
-              </div>
-
-              {/* Thông tin văn bằng */}
-              <div className="mb-8">
-                <h3 className="text-md font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
-                  Thông tin văn bằng
-                </h3>
-                <div className="space-y-0">
-                  {renderField("Số hiệu văn bằng", result.diploma_number)}
-                  {renderField("Số vào sổ", result.registry_number)}
-                  {renderField("Ngày cấp", formatDate(result.issue_date))}
-                </div>
-              </div>
-
               {/* Trạng thái xác thực */}
-              <div className="bg-green-50 border border-green-200 rounded-md p-4">
-                <div className="flex items-center">
+              <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
+                <div className="flex items-start">
                   <svg
-                    className="h-5 w-5 text-green-500 mr-2"
+                    className="h-6 w-6 text-green-500 mr-3 flex-shrink-0"
                     fill="currentColor"
                     viewBox="0 0 20 20"
                   >
@@ -248,7 +297,7 @@ export default function Home() {
                     />
                   </svg>
                   <div>
-                    <p className="text-green-800 font-medium">
+                    <p className="text-green-800 font-medium text-lg">
                       Văn bằng hợp lệ
                     </p>
                     <p className="text-green-600 text-sm mt-1">
@@ -257,18 +306,124 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+
+              {/* Thông tin cơ bản */}
+              <div className="mb-6">
+                <h3 className="text-md font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
+                  Thông tin văn bằng
+                </h3>
+                <div className="space-y-0">
+                  {renderField("Số hiệu văn bằng", result.diploma_number)}
+                  {renderField("Số vào sổ", result.registry_number)}
+                  {renderField("Ngày cấp", formatDate(result.issue_date))}
+                </div>
+              </div>
+
+              {/* Thông tin trường học */}
+              <div className="mb-6">
+                <h3 className="text-md font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
+                  Thông tin đào tạo
+                </h3>
+                <div className="space-y-0">
+                  {renderField("Tên trường cấp văn bằng", result.school_name)}
+                  {renderField("Ngành đào tạo", result.major)}
+                  {renderField("Chuyên ngành đào tạo", result.specialization)}
+                </div>
+              </div>
+
+              {/* Nút xem chi tiết */}
+              <div className="flex justify-center pt-4">
+                <button
+                  onClick={() => setShowDetail(!showDetail)}
+                  className="px-6 py-2.5 bg-blue-50 text-[#0083c2] font-medium rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-[#0083c2] focus:ring-offset-2 transition-colors border border-blue-200"
+                >
+                  {showDetail ? (
+                    <div className="flex items-center">
+                      <svg
+                        className="w-5 h-5 mr-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 15l7-7 7 7"
+                        />
+                      </svg>
+                      Ẩn thông tin chi tiết
+                    </div>
+                  ) : (
+                    <div className="flex items-center">
+                      <svg
+                        className="w-5 h-5 mr-2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                      Xem thông tin chi tiết
+                    </div>
+                  )}
+                </button>
+              </div>
+
+              {/* Thông tin chi tiết sinh viên */}
+              {showDetail && result.student_info && (
+                <div className="mt-6 pt-6 border-t border-gray-200">
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
+                    <div className="flex items-start">
+                      <svg
+                        className="h-5 w-5 text-blue-500 mr-2 mt-0.5 flex-shrink-0"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      <p className="text-blue-700 text-sm">
+                        Thông tin chi tiết về người được cấp văn bằng
+                      </p>
+                    </div>
+                  </div>
+
+                  <h3 className="text-md font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
+                    Thông tin sinh viên
+                  </h3>
+                  <div className="space-y-0">
+                    {renderField("Mã sinh viên", result.student_info.student_code)}
+                    {renderField("Họ và tên", result.student_info.full_name)}
+                    {renderField("Ngành học", result.student_info.major)}
+                    {renderField("Hệ đào tạo", result.student_info.training_system)}
+                    {renderField("Năm tốt nghiệp", result.student_info.graduation_year)}
+                    {result.student_info.classification && renderField("Xếp loại", result.student_info.classification)}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {/* Footer info */}
         <div className="mt-8 text-center">
-          <p className="text-sm text-gray-500">
-            Hệ thống tra cứu văn bằng - Trường Đại học Quản lý và Công nghệ Hải
-            Phòng
+          <p className="text-sm text-gray-600 font-medium">
+            Hệ thống tra cứu văn bằng - Trường Đại học Quản lý và Công nghệ Hải Phòng
+          </p>
+          <p className="text-xs text-gray-500 mt-2">
+            Mọi thắc mắc xin liên hệ: Phòng Đào tạo - Email: daotao@hpu.edu.vn
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            Mọi thắc mắc xin liên hệ hotline: 1900-xxx-xxx
+            © 2025 Trường Đại học HPU. Phát triển bởi Trung tâm Công nghệ Thông tin
           </p>
         </div>
       </div>
