@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Captcha from "@/components/Captcha";
 
 export default function Home() {
   const [diplomaNumber, setDiplomaNumber] = useState("");
@@ -9,39 +8,12 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
-  const [captchaToken, setCaptchaToken] = useState(null);
-  const [captchaError, setCaptchaError] = useState(null);
-
-  const handleCaptchaVerify = (token) => {
-    setCaptchaToken(token);
-    setCaptchaError(null);
-    console.log("✅ Captcha verified:", token);
-  };
-
-  const handleCaptchaError = (error) => {
-    console.error("❌ Captcha error:", error);
-    setCaptchaError("Xác thực Captcha thất bại. Vui lòng thử lại.");
-    setCaptchaToken(null);
-  };
-
-  const handleCaptchaExpire = () => {
-    console.log("⏱️ Captcha expired");
-    setCaptchaToken(null);
-    setCaptchaError("Captcha đã hết hạn. Vui lòng xác thực lại.");
-  };
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
 
-    // Validate diploma number
     if (!diplomaNumber.trim()) {
       setError("Vui lòng nhập số hiệu bằng tốt nghiệp");
-      return;
-    }
-
-    // Check captcha (skip if disabled in development)
-    if (process.env.NEXT_PUBLIC_DISABLE_CAPTCHA !== 'true' && !captchaToken) {
-      setCaptchaError("Vui lòng xác thực Captcha trước khi tra cứu");
       return;
     }
 
@@ -51,39 +23,18 @@ export default function Home() {
     setShowDetail(false);
 
     try {
-      // Step 1: Verify captcha first (if enabled)
-      if (process.env.NEXT_PUBLIC_DISABLE_CAPTCHA !== 'true') {
-        const captchaVerify = await fetch("/api/verify-captcha", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: captchaToken }),
-        });
-
-        const captchaData = await captchaVerify.json();
-
-        if (!captchaData.success) {
-          setCaptchaError(captchaData.message || "Xác thực Captcha thất bại");
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Step 2: Search diploma
       const response = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          diplomaNumber: diplomaNumber.trim(),
-          captchaToken: captchaToken
-        }),
+        body: JSON.stringify({ diplomaNumber: diplomaNumber.trim() }),
       });
 
       const data = await response.json();
 
       if (response.ok && data.success) {
         setResult(data.data);
-        setCaptchaError(null);
       } else if (response.status === 429) {
+        // Rate limit exceeded
         setError(data.message || "Bạn đã vượt quá số lần tra cứu cho phép. Vui lòng thử lại sau.");
       } else {
         setError(data.message || "Không có số hiệu bằng Tốt nghiệp này!");
@@ -93,8 +44,6 @@ export default function Home() {
       setError("Đã có lỗi xảy ra, vui lòng thử lại");
     } finally {
       setLoading(false);
-      // Reset captcha token after search (user needs to verify again for next search)
-      setCaptchaToken(null);
     }
   };
 
@@ -158,33 +107,6 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Captcha Widget */}
-            <div className="mb-6">
-              <Captcha
-                onVerify={handleCaptchaVerify}
-                onError={handleCaptchaError}
-                onExpire={handleCaptchaExpire}
-              />
-              {captchaError && (
-                <div className="mt-3 bg-red-50 border border-red-200 rounded-md p-3">
-                  <p className="text-sm text-red-700 flex items-start">
-                    <svg
-                      className="h-5 w-5 text-red-400 mr-2 mt-0.5 flex-shrink-0"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    {captchaError}
-                  </p>
-                </div>
-              )}
-            </div>
-
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
@@ -225,8 +147,6 @@ export default function Home() {
                     setResult(null);
                     setError(null);
                     setShowDetail(false);
-                    setCaptchaToken(null);
-                    setCaptchaError(null);
                   }}
                   className="px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 transition-colors"
                 >
@@ -406,7 +326,6 @@ export default function Home() {
                     {renderField("Ngành học", result.student_info.major)}
                     {renderField("Hệ đào tạo", result.student_info.training_system)}
                     {renderField("Năm tốt nghiệp", result.student_info.graduation_year)}
-                    {result.student_info.classification && renderField("Xếp loại", result.student_info.classification)}
                   </div>
                 </div>
               )}
