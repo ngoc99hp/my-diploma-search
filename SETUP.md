@@ -401,7 +401,7 @@ Sau khi hoàn thành setup, bạn có thể:
    - API tra cứu
 
 2. 🚧 **Phase 2 (Tiếp theo):**
-   - Tích hợp Captcha
+   - Tích hợp Captcha (Hoàn thành)
    - Admin Panel
    - Import Excel
    - Backup automation
