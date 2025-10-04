@@ -4,14 +4,14 @@ import { searchDiploma, logSearch, checkRateLimit } from '@/lib/db';
 /**
  * API tra cứu văn bằng
  * POST /api/search
- * Body: { diplomaNumber: string }
+ * Body: { diplomaNumber: string, recaptchaToken: string }
  */
 export async function POST(request) {
   const startTime = Date.now();
-  
+
   try {
     // Lấy thông tin request
-    const { diplomaNumber } = await request.json();
+    const { diplomaNumber, recaptchaToken } = await request.json();
     const ipAddress = request.headers.get('x-forwarded-for') || 
                      request.headers.get('x-real-ip') || 
                      'unknown';
@@ -19,6 +19,7 @@ export async function POST(request) {
 
     // Validate input
     if (!diplomaNumber || !diplomaNumber.trim()) {
+      await logSearch(diplomaNumber || 'unknown', ipAddress, userAgent, false, Date.now() - startTime, null, 'failed');
       return new Response(
         JSON.stringify({ 
           success: false,
@@ -31,11 +32,69 @@ export async function POST(request) {
       );
     }
 
+    // Verify reCAPTCHA token
+    if (!recaptchaToken) {
+      await logSearch(diplomaNumber.trim(), ipAddress, userAgent, false, Date.now() - startTime, null, 'failed');
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: 'Thiếu token CAPTCHA' 
+        }),
+        {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    const verifyUrl = `https://www.google.com/recaptcha/api/siteverify`;
+    const captchaResponse = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        secret: process.env.RECAPTCHA_SECRET_KEY,
+        response: recaptchaToken,
+        remoteip: ipAddress,
+      }),
+    });
+
+    const captchaData = await captchaResponse.json();
+    if (!captchaData.success || captchaData.score < 0.5) {
+      await logSearch(
+        diplomaNumber.trim(),
+        ipAddress,
+        userAgent,
+        false,
+        Date.now() - startTime,
+        captchaData.score || null,
+        'failed'
+      );
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: 'Xác minh CAPTCHA thất bại. Vui lòng thử lại.' 
+        }),
+        {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     // Kiểm tra rate limit
     try {
       const rateLimitStatus = await checkRateLimit(ipAddress);
       
       if (!rateLimitStatus.allowed) {
+        await logSearch(
+          diplomaNumber.trim(),
+          ipAddress,
+          userAgent,
+          false,
+          Date.now() - startTime,
+          captchaData.score,
+          'success'
+        );
         return new Response(
           JSON.stringify({ 
             success: false,
@@ -55,8 +114,18 @@ export async function POST(request) {
         );
       }
     } catch (rateLimitError) {
-      // Nếu rate limit check fail, vẫn cho phép request (fail-open)
       console.error('Rate limit check failed:', rateLimitError);
+      await logSearch(
+        diplomaNumber.trim(),
+        ipAddress,
+        userAgent,
+        false,
+        Date.now() - startTime,
+        captchaData.score,
+        'success',
+        'Rate limit check error'
+      );
+      // Fail-open: cho phép tiếp tục nếu rate limit check fail
     }
 
     // Tìm kiếm trong database
@@ -72,7 +141,9 @@ export async function POST(request) {
       ipAddress,
       userAgent,
       !!result,
-      responseTime
+      responseTime,
+      captchaData.score,
+      'success'
     );
 
     // Nếu tìm thấy
@@ -108,6 +179,15 @@ export async function POST(request) {
     }
 
     // Nếu không tìm thấy
+    await logSearch(
+      trimmedDiplomaNumber,
+      ipAddress,
+      userAgent,
+      false,
+      responseTime,
+      captchaData.score,
+      'success'
+    );
     return new Response(
       JSON.stringify({ 
         success: false,
@@ -125,6 +205,18 @@ export async function POST(request) {
       stack: error.stack
     });
     
+    // Log lỗi
+    await logSearch(
+      diplomaNumber?.trim() || 'unknown',
+      ipAddress,
+      userAgent,
+      false,
+      Date.now() - startTime,
+      null,
+      'failed',
+      `Server error: ${error.message}`
+    );
+
     // Không trả về chi tiết lỗi cho client trong production
     const errorMessage = process.env.NODE_ENV === 'development' 
       ? error.message 

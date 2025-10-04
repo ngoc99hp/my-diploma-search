@@ -1,13 +1,16 @@
+// src/app/page.js
 "use client";
 
 import { useState } from "react";
+import { GoogleReCaptchaProvider, useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
-export default function Home() {
+function SearchForm() {
   const [diplomaNumber, setDiplomaNumber] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -17,16 +20,24 @@ export default function Home() {
       return;
     }
 
+    if (!executeRecaptcha) {
+      setError("Không thể xác minh CAPTCHA, vui lòng thử lại");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
     setShowDetail(false);
 
     try {
+      // Lấy token reCAPTCHA
+      const recaptchaToken = await executeRecaptcha('search_diploma');
+
       const response = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ diplomaNumber: diplomaNumber.trim() }),
+        body: JSON.stringify({ diplomaNumber: diplomaNumber.trim(), recaptchaToken }),
       });
 
       const data = await response.json();
@@ -34,8 +45,9 @@ export default function Home() {
       if (response.ok && data.success) {
         setResult(data.data);
       } else if (response.status === 429) {
-        // Rate limit exceeded
         setError(data.message || "Bạn đã vượt quá số lần tra cứu cho phép. Vui lòng thử lại sau.");
+      } else if (response.status === 403) {
+        setError(data.message || "Xác minh CAPTCHA thất bại. Vui lòng thử lại.");
       } else {
         setError(data.message || "Không có số hiệu bằng Tốt nghiệp này!");
       }
@@ -347,5 +359,20 @@ export default function Home() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <GoogleReCaptchaProvider
+      reCaptchaKey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
+      scriptProps={{
+        async: true,
+        defer: true,
+        appendTo: 'head',
+      }}
+    >
+      <SearchForm />
+    </GoogleReCaptchaProvider>
   );
 }

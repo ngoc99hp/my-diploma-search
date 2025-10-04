@@ -181,7 +181,7 @@ export async function searchDiploma(diplomaNumber) {
 /**
  * Log tra cứu vào database
  */
-export async function logSearch(diplomaNumber, ipAddress, userAgent, found, responseTimeMs) {
+export async function logSearch(diplomaNumber, ipAddress, userAgent, found, responseTimeMs, captchaScore = null, captchaStatus = null) {
   if (process.env.ENABLE_SEARCH_LOGGING !== 'true') {
     return;
   }
@@ -189,9 +189,9 @@ export async function logSearch(diplomaNumber, ipAddress, userAgent, found, resp
   try {
     await query(
       `INSERT INTO search_logs 
-        (diploma_number, ip_address, user_agent, found, response_time_ms)
-      VALUES ($1, $2, $3, $4, $5)`,
-      [diplomaNumber, ipAddress, userAgent, found, responseTimeMs]
+        (diploma_number, ip_address, user_agent, found, response_time_ms, captcha_score, captcha_status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [diplomaNumber, ipAddress, userAgent, found, responseTimeMs, captchaScore, captchaStatus]
     );
   } catch (error) {
     console.error('Failed to log search:', error);
@@ -205,7 +205,7 @@ export async function logSearch(diplomaNumber, ipAddress, userAgent, found, resp
 export async function checkRateLimit(ipAddress) {
   const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '3600000');
   const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100');
-  
+  console.log('Rate limit config:', { windowMs, maxRequests });
   const windowStart = new Date(Date.now() - windowMs);
   
   const result = await query(
