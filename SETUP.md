@@ -402,7 +402,7 @@ Sau khi hoàn thành setup, bạn có thể:
 
 2. 🚧 **Phase 2 (Tiếp theo):**
    - Tích hợp Captcha (Hoàn thành)
-   - Admin Panel
+   - Admin Panel (Hoàn thành)
    - Import Excel
    - Backup automation
 

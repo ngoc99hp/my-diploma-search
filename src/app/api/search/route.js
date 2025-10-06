@@ -1,16 +1,10 @@
 // src/app/api/search/route.js
 import { searchDiploma, logSearch, checkRateLimit } from '@/lib/db';
 
-/**
- * API tra cứu văn bằng
- * POST /api/search
- * Body: { diplomaNumber: string, recaptchaToken: string }
- */
 export async function POST(request) {
   const startTime = Date.now();
 
   try {
-    // Lấy thông tin request
     const { diplomaNumber, recaptchaToken } = await request.json();
     const ipAddress = request.headers.get('x-forwarded-for') || 
                      request.headers.get('x-real-ip') || 
@@ -19,7 +13,7 @@ export async function POST(request) {
 
     // Validate input
     if (!diplomaNumber || !diplomaNumber.trim()) {
-      await logSearch(diplomaNumber || 'unknown', ipAddress, userAgent, false, Date.now() - startTime, null, 'failed');
+      await logSearch(diplomaNumber || 'unknown', ipAddress, userAgent, false, Date.now() - startTime, null, 'failed', 'Missing diploma number');
       return new Response(
         JSON.stringify({ 
           success: false,
@@ -34,11 +28,11 @@ export async function POST(request) {
 
     // Verify reCAPTCHA token
     if (!recaptchaToken) {
-      await logSearch(diplomaNumber.trim(), ipAddress, userAgent, false, Date.now() - startTime, null, 'failed');
+      await logSearch(diplomaNumber.trim(), ipAddress, userAgent, false, Date.now() - startTime, null, 'failed', 'Missing CAPTCHA token');
       return new Response(
         JSON.stringify({ 
           success: false,
-          message: 'Thiếu token CAPTCHA' 
+          message: 'Thiếu token CAPTCHA. Vui lòng tải lại trang và thử lại.' 
         }),
         {
           status: 403,
@@ -67,7 +61,8 @@ export async function POST(request) {
         false,
         Date.now() - startTime,
         captchaData.score || null,
-        'failed'
+        'failed',
+        'CAPTCHA verification failed'
       );
       return new Response(
         JSON.stringify({ 
@@ -93,7 +88,8 @@ export async function POST(request) {
           false,
           Date.now() - startTime,
           captchaData.score,
-          'success'
+          'success',
+          'Rate limit exceeded'
         );
         return new Response(
           JSON.stringify({ 
@@ -115,24 +111,13 @@ export async function POST(request) {
       }
     } catch (rateLimitError) {
       console.error('Rate limit check failed:', rateLimitError);
-      await logSearch(
-        diplomaNumber.trim(),
-        ipAddress,
-        userAgent,
-        false,
-        Date.now() - startTime,
-        captchaData.score,
-        'success',
-        'Rate limit check error'
-      );
-      // Fail-open: cho phép tiếp tục nếu rate limit check fail
+      // Fail-open: cho phép tiếp tục
     }
 
     // Tìm kiếm trong database
     const trimmedDiplomaNumber = diplomaNumber.trim();
     const result = await searchDiploma(trimmedDiplomaNumber);
     
-    // Tính thời gian response
     const responseTime = Date.now() - startTime;
 
     // Log tra cứu
@@ -148,7 +133,6 @@ export async function POST(request) {
 
     // Nếu tìm thấy
     if (result) {
-      // Format dữ liệu trả về
       const responseData = {
         success: true,
         data: {
@@ -173,21 +157,12 @@ export async function POST(request) {
         status: 200,
         headers: { 
           'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=300' // Cache 5 phút
+          'Cache-Control': 'public, max-age=300'
         },
       });
     }
 
     // Nếu không tìm thấy
-    await logSearch(
-      trimmedDiplomaNumber,
-      ipAddress,
-      userAgent,
-      false,
-      responseTime,
-      captchaData.score,
-      'success'
-    );
     return new Response(
       JSON.stringify({ 
         success: false,
@@ -202,22 +177,45 @@ export async function POST(request) {
   } catch (error) {
     console.error('Search API Error:', {
       message: error.message,
+      code: error.code,
       stack: error.stack
     });
+
+    // Check for database connection errors
+    if (error.code === 'DB_CONNECTION_ERROR') {
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: 'Hệ thống đang bảo trì. Vui lòng thử lại sau ít phút.',
+          errorType: 'database_connection'
+        }),
+        {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
     
     // Log lỗi
-    await logSearch(
-      diplomaNumber?.trim() || 'unknown',
-      ipAddress,
-      userAgent,
-      false,
-      Date.now() - startTime,
-      null,
-      'failed',
-      `Server error: ${error.message}`
-    );
+    try {
+      const ipAddress = request.headers.get('x-forwarded-for') || 'unknown';
+      const userAgent = request.headers.get('user-agent') || 'unknown';
+      const body = await request.json().catch(() => ({}));
+      
+      await logSearch(
+        body.diplomaNumber?.trim() || 'unknown',
+        ipAddress,
+        userAgent,
+        false,
+        Date.now() - startTime,
+        null,
+        'failed',
+        `Server error: ${error.message}`
+      );
+    } catch (logError) {
+      console.error('Failed to log error:', logError);
+    }
 
-    // Không trả về chi tiết lỗi cho client trong production
     const errorMessage = process.env.NODE_ENV === 'development' 
       ? error.message 
       : 'Đã có lỗi xảy ra, vui lòng thử lại';
@@ -236,10 +234,6 @@ export async function POST(request) {
   }
 }
 
-/**
- * API kiểm tra health
- * GET /api/search
- */
 export async function GET() {
   return new Response(
     JSON.stringify({ 

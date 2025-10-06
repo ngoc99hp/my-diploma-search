@@ -10,22 +10,10 @@ function getPool() {
   if (!pool) {
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      // Hoặc sử dụng các biến riêng lẻ:
-      // host: process.env.DB_HOST,
-      // port: parseInt(process.env.DB_PORT || '5432'),
-      // database: process.env.DB_NAME,
-      // user: process.env.DB_USER,
-      // password: process.env.DB_PASSWORD,
-      
-      // Connection pool settings
       min: parseInt(process.env.DB_POOL_MIN || '2'),
       max: parseInt(process.env.DB_POOL_MAX || '10'),
-      
-      // Timeout settings
       connectionTimeoutMillis: 5000,
       idleTimeoutMillis: 30000,
-      
-      // SSL settings (nếu DB yêu cầu)
       ssl: process.env.NODE_ENV === 'production' ? {
         rejectUnauthorized: false
       } : false
@@ -34,7 +22,7 @@ function getPool() {
     // Error handling
     pool.on('error', (err) => {
       console.error('Unexpected database error:', err);
-      process.exit(-1);
+      // Không exit process, để app có thể recover
     });
 
     // Log connection info (chỉ trong development)
@@ -49,10 +37,7 @@ function getPool() {
 }
 
 /**
- * Thực thi query
- * @param {string} text - SQL query
- * @param {Array} params - Query parameters
- * @returns {Promise<Object>} Query result
+ * Thực thi query với error handling tốt hơn
  */
 export async function query(text, params) {
   const start = Date.now();
@@ -62,7 +47,6 @@ export async function query(text, params) {
     const result = await client.query(text, params);
     const duration = Date.now() - start;
     
-    // Log query trong development
     if (process.env.NODE_ENV === 'development') {
       console.log('Executed query', {
         text,
@@ -73,11 +57,34 @@ export async function query(text, params) {
     
     return result;
   } catch (error) {
+    // Check if database is down
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      console.error('❌ Database connection failed:', error.message);
+      const dbError = new Error('Không thể kết nối đến cơ sở dữ liệu. Vui lòng thử lại sau.');
+      dbError.code = 'DB_CONNECTION_ERROR';
+      throw dbError;
+    }
+
+    // Check for specific PostgreSQL errors
+    if (error.code === '23505') { // Unique violation
+      const duplicateError = new Error('Dữ liệu đã tồn tại trong hệ thống');
+      duplicateError.code = 'DUPLICATE_ERROR';
+      throw duplicateError;
+    }
+
+    if (error.code === '23503') { // Foreign key violation
+      const fkError = new Error('Không thể thực hiện thao tác do ràng buộc dữ liệu');
+      fkError.code = 'FK_VIOLATION';
+      throw fkError;
+    }
+
     console.error('Database query error:', {
       text,
       error: error.message,
+      code: error.code,
       stack: error.stack
     });
+    
     throw error;
   }
 }
@@ -88,7 +95,6 @@ export async function query(text, params) {
 export async function getClient() {
   const client = await getPool().connect();
   
-  // Wrap release để log
   const release = client.release;
   const timeout = setTimeout(() => {
     console.error('A client has been checked out for more than 5 seconds!');
@@ -104,7 +110,6 @@ export async function getClient() {
 
 /**
  * Transaction helper
- * @param {Function} callback - Async function to execute in transaction
  */
 export async function transaction(callback) {
   const client = await getClient();
@@ -123,7 +128,7 @@ export async function transaction(callback) {
 }
 
 /**
- * Đóng pool connection (dùng khi shutdown)
+ * Đóng pool connection
  */
 export async function closePool() {
   if (pool) {
@@ -147,41 +152,45 @@ export async function testConnection() {
   }
 }
 
-// ============================================
-// HELPER FUNCTIONS - Các hàm trợ giúp
-// ============================================
-
 /**
  * Tìm kiếm văn bằng theo số hiệu
  */
 export async function searchDiploma(diplomaNumber) {
-  const result = await query(
-    `SELECT 
-      diploma_number,
-      registry_number,
-      issue_date,
-      school_name,
-      major,
-      specialization,
-      student_code,
-      full_name,
-      training_system,
-      graduation_year,
-      classification
-    FROM diplomas
-    WHERE diploma_number = $1
-    AND is_active = TRUE
-    LIMIT 1`,
-    [diplomaNumber]
-  );
+  try {
+    const result = await query(
+      `SELECT 
+        diploma_number,
+        registry_number,
+        issue_date,
+        school_name,
+        major,
+        specialization,
+        student_code,
+        full_name,
+        training_system,
+        graduation_year,
+        classification
+      FROM diplomas
+      WHERE diploma_number = $1
+      AND is_active = TRUE
+      LIMIT 1`,
+      [diplomaNumber]
+    );
 
-  return result.rows[0] || null;
+    return result.rows[0] || null;
+  } catch (error) {
+    if (error.code === 'DB_CONNECTION_ERROR') {
+      throw error; // Re-throw để API handler xử lý
+    }
+    console.error('Search diploma error:', error);
+    throw new Error('Lỗi khi tra cứu văn bằng');
+  }
 }
 
 /**
  * Log tra cứu vào database
  */
-export async function logSearch(diplomaNumber, ipAddress, userAgent, found, responseTimeMs, captchaScore = null, captchaStatus = null) {
+export async function logSearch(diplomaNumber, ipAddress, userAgent, found, responseTimeMs, captchaScore = null, captchaStatus = null, errorMessage = null) {
   if (process.env.ENABLE_SEARCH_LOGGING !== 'true') {
     return;
   }
@@ -189,9 +198,9 @@ export async function logSearch(diplomaNumber, ipAddress, userAgent, found, resp
   try {
     await query(
       `INSERT INTO search_logs 
-        (diploma_number, ip_address, user_agent, found, response_time_ms, captcha_score, captcha_status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [diplomaNumber, ipAddress, userAgent, found, responseTimeMs, captchaScore, captchaStatus]
+        (diploma_number, ip_address, user_agent, found, response_time_ms, captcha_score, captcha_status, error_message)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [diplomaNumber, ipAddress, userAgent, found, responseTimeMs, captchaScore, captchaStatus, errorMessage]
     );
   } catch (error) {
     console.error('Failed to log search:', error);
@@ -203,26 +212,36 @@ export async function logSearch(diplomaNumber, ipAddress, userAgent, found, resp
  * Kiểm tra rate limit
  */
 export async function checkRateLimit(ipAddress) {
-  const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '3600000');
-  const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100');
-  console.log('Rate limit config:', { windowMs, maxRequests });
-  const windowStart = new Date(Date.now() - windowMs);
-  
-  const result = await query(
-    `SELECT COUNT(*) as request_count
-    FROM search_logs
-    WHERE ip_address = $1
-    AND search_time >= $2`,
-    [ipAddress, windowStart]
-  );
+  try {
+    const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '3600000');
+    const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100');
+    const windowStart = new Date(Date.now() - windowMs);
+    
+    const result = await query(
+      `SELECT COUNT(*) as request_count
+      FROM search_logs
+      WHERE ip_address = $1
+      AND search_time >= $2`,
+      [ipAddress, windowStart]
+    );
 
-  const requestCount = parseInt(result.rows[0].request_count);
-  return {
-    allowed: requestCount < maxRequests,
-    remaining: Math.max(0, maxRequests - requestCount),
-    limit: maxRequests,
-    resetAt: new Date(Date.now() + windowMs)
-  };
+    const requestCount = parseInt(result.rows[0].request_count);
+    return {
+      allowed: requestCount < maxRequests,
+      remaining: Math.max(0, maxRequests - requestCount),
+      limit: maxRequests,
+      resetAt: new Date(Date.now() + windowMs)
+    };
+  } catch (error) {
+    console.error('Rate limit check error:', error);
+    // Fail-open: cho phép request nếu không check được
+    return {
+      allowed: true,
+      remaining: 100,
+      limit: 100,
+      resetAt: new Date(Date.now() + 3600000)
+    };
+  }
 }
 
 /**
@@ -275,7 +294,6 @@ export async function logAdminAction(adminId, action, tableName, recordId, oldDa
   }
 }
 
-// Export default
 export default {
   query,
   getClient,
