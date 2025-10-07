@@ -16,6 +16,12 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingDiploma, setEditingDiploma] = useState(null);
+  const [diplomasPagination, setDiplomasPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  });
   
   // Import state
   const [showImportModal, setShowImportModal] = useState(false);
@@ -26,6 +32,12 @@ export default function AdminDashboard() {
   // Logs state
   const [logs, setLogs] = useState([]);
   const [stats, setStats] = useState(null);
+  const [logsPagination, setLogsPagination] = useState({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 0
+  });
 
   useEffect(() => {
     checkAuth();
@@ -35,11 +47,28 @@ export default function AdminDashboard() {
     if (admin) {
       loadData();
     }
-  }, [currentPage, admin]);
+  }, [currentPage, admin, diplomasPagination.page, logsPagination.page, searchTerm]);
+
+  const handleApiError = async (response, context = '') => {
+    if (response.status === 401) {
+      toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      setTimeout(() => {
+        router.push('/admin/login');
+      }, 1500);
+      return true;
+    }
+    return false;
+  };
 
   const checkAuth = async () => {
     try {
       const response = await fetch('/api/admin/auth');
+      
+      if (response.status === 401) {
+        router.push('/admin/login');
+        return;
+      }
+
       const data = await response.json();
       
       if (response.ok && data.success) {
@@ -82,10 +111,25 @@ export default function AdminDashboard() {
 
   const loadDiplomas = async () => {
     try {
-      const response = await fetch('/api/admin/diplomas');
+      const params = new URLSearchParams({
+        page: diplomasPagination.page.toString(),
+        limit: diplomasPagination.limit.toString(),
+        search: searchTerm
+      });
+
+      const response = await fetch(`/api/admin/diplomas?${params}`);
+      
+      if (await handleApiError(response, 'load diplomas')) return;
+      
       const data = await response.json();
       if (data.success) {
         setDiplomas(data.diplomas);
+        setDiplomasPagination(prev => ({
+          ...prev,
+          ...data.pagination
+        }));
+      } else {
+        toast.error(data.message || 'Không thể tải danh sách văn bằng');
       }
     } catch (error) {
       console.error('Load diplomas failed:', error);
@@ -95,11 +139,26 @@ export default function AdminDashboard() {
 
   const loadLogs = async () => {
     try {
-      const response = await fetch('/api/admin/logs');
+      const params = new URLSearchParams({
+        page: logsPagination.page.toString(),
+        limit: logsPagination.limit.toString(),
+        days: '7'
+      });
+
+      const response = await fetch(`/api/admin/logs?${params}`);
+      
+      if (await handleApiError(response, 'load logs')) return;
+      
       const data = await response.json();
       if (data.success) {
         setLogs(data.logs);
         setStats(data.stats);
+        setLogsPagination(prev => ({
+          ...prev,
+          ...data.pagination
+        }));
+      } else {
+        toast.error(data.message || 'Không thể tải nhật ký tra cứu');
       }
     } catch (error) {
       console.error('Load logs failed:', error);
@@ -113,6 +172,11 @@ export default function AdminDashboard() {
         const response = await fetch(`/api/admin/diplomas?id=${id}`, {
           method: 'DELETE'
         });
+        
+        if (await handleApiError(response, 'delete diploma')) {
+          throw new Error('Session expired');
+        }
+        
         const data = await response.json();
         
         if (data.success) {
@@ -125,7 +189,7 @@ export default function AdminDashboard() {
       {
         loading: 'Đang xóa văn bằng...',
         success: (message) => message || 'Xóa văn bằng thành công! 🗑️',
-        error: (err) => err.message || 'Xóa văn bằng thất bại'
+        error: (err) => err.message === 'Session expired' ? '' : (err.message || 'Xóa văn bằng thất bại')
       }
     );
   };
@@ -145,6 +209,10 @@ export default function AdminDashboard() {
           body: JSON.stringify(formData)
         });
         
+        if (await handleApiError(response, 'save diploma')) {
+          throw new Error('Session expired');
+        }
+        
         const data = await response.json();
         
         if (data.success) {
@@ -163,7 +231,7 @@ export default function AdminDashboard() {
             ? `${message || 'Cập nhật thành công'} ✅` 
             : `${message || 'Thêm văn bằng thành công'} 🎉`;
         },
-        error: (err) => err.message || 'Có lỗi xảy ra'
+        error: (err) => err.message === 'Session expired' ? '' : (err.message || 'Có lỗi xảy ra')
       }
     );
   };
@@ -171,6 +239,9 @@ export default function AdminDashboard() {
   const handleDownloadTemplate = async () => {
     try {
       const response = await fetch('/api/admin/import');
+      
+      if (await handleApiError(response, 'download template')) return;
+      
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -224,6 +295,10 @@ export default function AdminDashboard() {
           body: formData
         });
 
+        if (await handleApiError(response, 'import')) {
+          throw new Error('Session expired');
+        }
+
         const data = await response.json();
 
         if (data.success) {
@@ -269,17 +344,22 @@ export default function AdminDashboard() {
           }
           return result.message || 'Import thành công! 📊';
         },
-        error: (err) => err.message || 'Import thất bại',
+        error: (err) => err.message === 'Session expired' ? '' : (err.message || 'Import thất bại'),
         finally: () => setImporting(false)
       }
     );
   };
 
-  const filteredDiplomas = diplomas.filter(d => 
-    d.diploma_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    d.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    d.student_code?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Handle search with debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (currentPage === 'diplomas') {
+        setDiplomasPagination(prev => ({ ...prev, page: 1 }));
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   if (loading) {
     return (
@@ -293,7 +373,7 @@ export default function AdminDashboard() {
     <>
       <Toaster position="top-right" richColors />
       <div className="min-h-screen bg-gray-50 flex">
-        {/* Sidebar */}
+        {/* Sidebar - Giữ nguyên như cũ */}
         <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-blue-900 text-white transition-all duration-300 flex flex-col`}>
           <div className="p-6 border-b border-blue-800 flex items-center justify-between">
             {sidebarOpen && <h1 className="text-xl font-bold">Admin Panel</h1>}
@@ -356,7 +436,12 @@ export default function AdminDashboard() {
             {currentPage === 'diplomas' && (
               <div>
                 <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-800">Quản lý văn bằng</h2>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">Quản lý văn bằng</h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Tổng: {diplomasPagination.total} văn bằng
+                    </p>
+                  </div>
                   <div className="flex gap-3">
                     <button
                       onClick={() => setShowImportModal(true)}
@@ -385,7 +470,7 @@ export default function AdminDashboard() {
                 <div className="bg-white rounded-lg shadow mb-6 p-4">
                   <input
                     type="text"
-                    placeholder="Tìm kiếm theo số hiệu, họ tên, mã SV..."
+                    placeholder="Tìm kiếm theo số hiệu, họ tên, mã SV, ngành..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -404,7 +489,7 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredDiplomas.map((diploma) => (
+                      {diplomas.map((diploma) => (
                         <tr key={diploma.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 text-sm font-medium text-gray-900">{diploma.diploma_number}</td>
                           <td className="px-6 py-4 text-sm text-gray-900">{diploma.full_name}</td>
@@ -449,19 +534,33 @@ export default function AdminDashboard() {
                       ))}
                     </tbody>
                   </table>
-                  {filteredDiplomas.length === 0 && (
+                  {diplomas.length === 0 && (
                     <div className="text-center py-8 text-gray-500">
                       Không tìm thấy văn bằng nào
                     </div>
                   )}
                 </div>
+
+                {/* Diplomas Pagination */}
+                {diplomasPagination.totalPages > 1 && (
+                  <Pagination
+                    currentPage={diplomasPagination.page}
+                    totalPages={diplomasPagination.totalPages}
+                    onPageChange={(page) => setDiplomasPagination(prev => ({ ...prev, page }))}
+                  />
+                )}
               </div>
             )}
 
             {/* Logs Viewer */}
             {currentPage === 'logs' && (
               <div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">Nhật ký tra cứu</h2>
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-gray-800">Nhật ký tra cứu</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Tổng: {logsPagination.total} lượt tra cứu (7 ngày gần nhất)
+                  </p>
+                </div>
 
                 {stats && (
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -498,7 +597,7 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {logs.slice(0, 100).map((log) => (
+                      {logs.map((log) => (
                         <tr key={log.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 text-sm text-gray-900">
                             {new Date(log.search_time).toLocaleString('vi-VN')}
@@ -527,12 +626,21 @@ export default function AdminDashboard() {
                     </div>
                   )}
                 </div>
+
+                {/* Logs Pagination */}
+                {logsPagination.totalPages > 1 && (
+                  <Pagination
+                    currentPage={logsPagination.page}
+                    totalPages={logsPagination.totalPages}
+                    onPageChange={(page) => setLogsPagination(prev => ({ ...prev, page }))}
+                  />
+                )}
               </div>
             )}
           </div>
         </div>
 
-        {/* Modal for Add/Edit Diploma */}
+        {/* Modals */}
         {showModal && (
           <DiplomaModal
             diploma={editingDiploma}
@@ -544,7 +652,6 @@ export default function AdminDashboard() {
           />
         )}
 
-        {/* Import Excel Modal */}
         {showImportModal && (
           <ImportModal
             file={importFile}
@@ -567,6 +674,115 @@ export default function AdminDashboard() {
   );
 }
 
+// Pagination Component
+function Pagination({ currentPage, totalPages, onPageChange }) {
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
+  };
+
+  return (
+    <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 mt-6 rounded-lg shadow">
+      <div className="flex-1 flex justify-between sm:hidden">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Trước
+        </button>
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Sau
+        </button>
+      </div>
+      <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm text-gray-700">
+            Trang <span className="font-medium">{currentPage}</span> / <span className="font-medium">{totalPages}</span>
+          </p>
+        </div>
+        <div>
+          <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+            <button
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="sr-only">Trước</span>
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            </button>
+            
+            {getPageNumbers().map((page, index) => (
+              page === '...' ? (
+                <span
+                  key={`ellipsis-${index}`}
+                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700"
+                >
+                  ...
+                </span>
+              ) : (
+                <button
+                  key={page}
+                  onClick={() => onPageChange(page)}
+                  className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                    currentPage === page
+                      ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                      : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {page}
+                </button>
+              )
+            ))}
+            
+            <button
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="sr-only">Sau</span>
+              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Import Modal Component
 function ImportModal({ file, importing, fileInputRef, onFileSelect, onDownloadTemplate, onImport, onClose }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -676,6 +892,7 @@ function ImportModal({ file, importing, fileInputRef, onFileSelect, onDownloadTe
   );
 }
 
+// Diploma Modal Component
 function DiplomaModal({ diploma, onClose, onSave }) {
   const [formData, setFormData] = useState({
     diploma_number: diploma?.diploma_number || '',

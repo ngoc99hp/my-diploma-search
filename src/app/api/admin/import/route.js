@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 import * as XLSX from 'xlsx';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_ROWS = 1000; // Maximum rows to import at once
 
 // Verify admin token
 function verifyAdmin(request) {
@@ -30,50 +32,148 @@ export async function POST(request) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: 'Vui lòng chọn file Excel' 
+          message: 'Vui lòng chọn file Excel để import' 
         }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Check file type
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: `File quá lớn! Kích thước tối đa: ${MAX_FILE_SIZE / 1024 / 1024}MB. File của bạn: ${(file.size / 1024 / 1024).toFixed(2)}MB` 
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate file type
     const fileName = file.name.toLowerCase();
     if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: 'File phải có định dạng .xlsx hoặc .xls' 
+          message: 'Định dạng file không hợp lệ! Vui lòng chọn file Excel (.xlsx hoặc .xls)' 
         }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     // Read file
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    // Parse Excel
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    
-    // Convert to JSON
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-      raw: false,
-      defval: null 
-    });
-
-    if (jsonData.length === 0) {
+    let arrayBuffer;
+    try {
+      arrayBuffer = await file.arrayBuffer();
+    } catch (error) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: 'File Excel không có dữ liệu' 
+          message: 'Không thể đọc file. Vui lòng kiểm tra file và thử lại.' 
         }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Validate and process data
+    const buffer = Buffer.from(arrayBuffer);
+    
+    // Parse Excel with error handling
+    let workbook;
+    try {
+      workbook = XLSX.read(buffer, { type: 'buffer' });
+    } catch (error) {
+      console.error('Excel parse error:', error);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'File Excel bị lỗi hoặc không đúng định dạng. Vui lòng kiểm tra lại file.' 
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if workbook has sheets
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'File Excel không có sheet nào. Vui lòng kiểm tra lại file.' 
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    
+    // Convert to JSON with error handling
+    let jsonData;
+    try {
+      jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+        raw: false,
+        defval: null 
+      });
+    } catch (error) {
+      console.error('Sheet to JSON error:', error);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Không thể đọc dữ liệu từ sheet Excel. Vui lòng kiểm tra định dạng file.' 
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate data exists
+    if (!jsonData || jsonData.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'File Excel không có dữ liệu hoặc thiếu header. Vui lòng sử dụng file template mẫu.' 
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check max rows
+    if (jsonData.length > MAX_ROWS) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: `File có quá nhiều dòng! Tối đa: ${MAX_ROWS} dòng. File của bạn có ${jsonData.length} dòng. Vui lòng chia nhỏ file và import từng phần.` 
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate headers
+    const firstRow = jsonData[0];
+    const requiredHeaders = [
+      'Số hiệu văn bằng',
+      'Số vào sổ', 
+      'Ngày cấp',
+      'Ngành',
+      'Mã sinh viên',
+      'Họ và tên',
+      'Năm tốt nghiệp'
+    ];
+
+    const missingHeaders = requiredHeaders.filter(header => 
+      !(header in firstRow) && 
+      !Object.keys(firstRow).some(key => key.toLowerCase().includes(header.toLowerCase().replace(/[^a-z0-9]/g, '')))
+    );
+
+    if (missingHeaders.length > 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: `File Excel thiếu các cột bắt buộc: ${missingHeaders.join(', ')}. Vui lòng sử dụng file template mẫu.` 
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Process data
     const results = {
       total: jsonData.length,
       success: 0,
@@ -86,7 +186,7 @@ export async function POST(request) {
       const rowNumber = i + 2; // Excel rows start at 1, +1 for header
 
       try {
-        // Map Excel columns (support multiple column name variations)
+        // Map Excel columns
         const diplomaData = {
           diploma_number: row['Số hiệu văn bằng'] || row['So hieu'] || row['diploma_number'],
           registry_number: row['Số vào sổ'] || row['So vao so'] || row['registry_number'],
@@ -115,22 +215,44 @@ export async function POST(request) {
           continue;
         }
 
-        // Format date if needed (support multiple date formats)
+        // Format date
         if (diplomaData.issue_date) {
-          const date = new Date(diplomaData.issue_date);
-          if (isNaN(date.getTime())) {
-            // Try parsing DD/MM/YYYY format
-            const parts = diplomaData.issue_date.split('/');
-            if (parts.length === 3) {
-              diplomaData.issue_date = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          try {
+            const date = new Date(diplomaData.issue_date);
+            if (isNaN(date.getTime())) {
+              // Try parsing DD/MM/YYYY format
+              const parts = diplomaData.issue_date.toString().split('/');
+              if (parts.length === 3) {
+                diplomaData.issue_date = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+              } else {
+                throw new Error('Invalid date format');
+              }
+            } else {
+              diplomaData.issue_date = date.toISOString().split('T')[0];
             }
-          } else {
-            diplomaData.issue_date = date.toISOString().split('T')[0];
+          } catch (dateError) {
+            results.failed++;
+            results.errors.push({
+              row: rowNumber,
+              diploma_number: diplomaData.diploma_number,
+              message: `Ngày cấp không hợp lệ: ${diplomaData.issue_date}. Định dạng đúng: DD/MM/YYYY hoặc YYYY-MM-DD`
+            });
+            continue;
           }
         }
 
-        // Convert graduation_year to integer
-        diplomaData.graduation_year = parseInt(diplomaData.graduation_year);
+        // Validate and convert graduation_year
+        const year = parseInt(diplomaData.graduation_year);
+        if (isNaN(year) || year < 1950 || year > new Date().getFullYear() + 10) {
+          results.failed++;
+          results.errors.push({
+            row: rowNumber,
+            diploma_number: diplomaData.diploma_number,
+            message: `Năm tốt nghiệp không hợp lệ: ${diplomaData.graduation_year}`
+          });
+          continue;
+        }
+        diplomaData.graduation_year = year;
 
         // Check if diploma_number already exists
         const existingCheck = await query(
@@ -143,7 +265,7 @@ export async function POST(request) {
           results.errors.push({
             row: rowNumber,
             diploma_number: diplomaData.diploma_number,
-            message: 'Số hiệu văn bằng đã tồn tại'
+            message: 'Số hiệu văn bằng đã tồn tại trong hệ thống'
           });
           continue;
         }
@@ -192,6 +314,7 @@ export async function POST(request) {
       null,
       { 
         fileName: file.name,
+        fileSize: file.size,
         results 
       },
       `Import Excel: ${results.success} thành công, ${results.failed} thất bại`,
@@ -212,7 +335,14 @@ export async function POST(request) {
     
     if (error.message === 'Unauthorized' || error.name === 'JsonWebTokenError') {
       return new Response(
-        JSON.stringify({ success: false, message: 'Chưa đăng nhập' }),
+        JSON.stringify({ success: false, message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (error.name === 'TokenExpiredError') {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -220,7 +350,7 @@ export async function POST(request) {
     return new Response(
       JSON.stringify({ 
         success: false, 
-        message: error.message || 'Lỗi khi import file' 
+        message: 'Đã có lỗi xảy ra khi import file. Vui lòng thử lại.' 
       }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
@@ -257,21 +387,12 @@ export async function GET(request) {
 
     // Set column widths
     const columnWidths = [
-      { wch: 20 }, // Số hiệu văn bằng
-      { wch: 15 }, // Số vào sổ
-      { wch: 12 }, // Ngày cấp
-      { wch: 50 }, // Tên trường
-      { wch: 30 }, // Ngành
-      { wch: 30 }, // Chuyên ngành
-      { wch: 15 }, // Mã sinh viên
-      { wch: 25 }, // Họ và tên
-      { wch: 20 }, // Hệ đào tạo
-      { wch: 15 }, // Năm tốt nghiệp
-      { wch: 15 }  // Xếp loại
+      { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 50 },
+      { wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 25 },
+      { wch: 20 }, { wch: 15 }, { wch: 15 }
     ];
     worksheet['!cols'] = columnWidths;
 
-    // Generate Excel buffer
     const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
     return new Response(excelBuffer, {

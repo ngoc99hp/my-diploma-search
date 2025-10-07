@@ -14,18 +14,28 @@ function verifyAdmin(request) {
 }
 
 /**
- * GET /api/admin/logs - Lấy nhật ký tra cứu
+ * GET /api/admin/logs - Lấy nhật ký tra cứu với pagination
  */
 export async function GET(request) {
   try {
     const admin = verifyAdmin(request);
     
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '100');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '50');
     const days = parseInt(searchParams.get('days') || '7');
+    const offset = (page - 1) * limit;
     
-    // Get search logs
+    // Get total count for pagination
+    const countResult = await query(
+      `SELECT COUNT(*) as total
+       FROM search_logs
+       WHERE search_time >= NOW() - INTERVAL '1 day' * $1`,
+      [days]
+    );
+    const total = parseInt(countResult.rows[0].total);
+    
+    // Get search logs with pagination
     const logsResult = await query(
       `SELECT id, diploma_number, ip_address, user_agent, found, 
               response_time_ms, captcha_score, captcha_status, search_time
@@ -86,7 +96,15 @@ export async function GET(request) {
           avg_response_time: Math.round(parseFloat(statsResult.rows[0].avg_response_time || 0))
         },
         topSearched: topSearchedResult.rows,
-        dailyStats: dailyStatsResult.rows
+        dailyStats: dailyStatsResult.rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1
+        }
       }),
       {
         status: 200,

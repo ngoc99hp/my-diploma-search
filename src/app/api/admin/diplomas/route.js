@@ -14,34 +14,62 @@ function verifyAdmin(request) {
 }
 
 /**
- * GET /api/admin/diplomas - Lấy danh sách văn bằng
+ * GET /api/admin/diplomas - Lấy danh sách văn bằng với pagination
  */
 export async function GET(request) {
   try {
     const admin = verifyAdmin(request);
     
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '100');
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
+    const search = searchParams.get('search') || '';
+    const offset = (page - 1) * limit;
     
-    const result = await query(
-      `SELECT id, diploma_number, registry_number, issue_date, school_name,
-              major, specialization, student_code, full_name, training_system,
-              graduation_year, classification, is_active, created_at, updated_at
-       FROM diplomas
-       WHERE is_active = TRUE
-       ORDER BY created_at DESC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    );
-
-    const countResult = await query('SELECT COUNT(*) as total FROM diplomas WHERE is_active = TRUE');
+    // Build search query
+    let searchCondition = 'WHERE is_active = TRUE';
+    let searchValues = [];
+    
+    if (search) {
+      searchCondition += ` AND (
+        diploma_number ILIKE $1 OR 
+        full_name ILIKE $1 OR 
+        student_code ILIKE $1 OR
+        major ILIKE $1
+      )`;
+      searchValues.push(`%${search}%`);
+    }
+    
+    // Get total count for pagination
+    const countQuery = `SELECT COUNT(*) as total FROM diplomas ${searchCondition}`;
+    const countResult = await query(countQuery, searchValues);
+    const total = parseInt(countResult.rows[0].total);
+    
+    // Get paginated data
+    const dataQuery = `
+      SELECT id, diploma_number, registry_number, issue_date, school_name,
+             major, specialization, student_code, full_name, training_system,
+             graduation_year, classification, is_active, created_at, updated_at
+      FROM diplomas
+      ${searchCondition}
+      ORDER BY created_at DESC
+      LIMIT $${searchValues.length + 1} OFFSET $${searchValues.length + 2}
+    `;
+    
+    const result = await query(dataQuery, [...searchValues, limit, offset]);
     
     return new Response(
       JSON.stringify({
         success: true,
         diplomas: result.rows,
-        total: parseInt(countResult.rows[0].total)
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1
+        }
       }),
       {
         status: 200,
