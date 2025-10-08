@@ -4,32 +4,41 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Toaster, toast } from 'sonner';
 
+// Import components
+import Sidebar from './components/Sidebar';
+import DiplomasTable from './components/DiplomasTable';
+import LogsTable from './components/LogsTable';
+import DiplomaModal from './components/DiplomaModal';
+import ImportModal from './components/ImportModal';
+
 export default function AdminDashboard() {
   const router = useRouter();
+  const fileInputRef = useRef(null);
+
+  // UI State
   const [currentPage, setCurrentPage] = useState('diplomas');
   const [admin, setAdmin] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
-  // Diplomas state
+  // Diplomas State
   const [diplomas, setDiplomas] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingDiploma, setEditingDiploma] = useState(null);
   const [diplomasPagination, setDiplomasPagination] = useState({
     page: 1,
-    limit: 10,
+    limit: 20,
     total: 0,
     totalPages: 0
   });
   
-  // Import state
+  // Import State
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
-  const fileInputRef = useRef(null);
   
-  // Logs state
+  // Logs State
   const [logs, setLogs] = useState([]);
   const [stats, setStats] = useState(null);
   const [logsPagination, setLogsPagination] = useState({
@@ -39,38 +48,43 @@ export default function AdminDashboard() {
     totalPages: 0
   });
 
+  // Effects
   useEffect(() => {
     checkAuth();
   }, []);
 
   useEffect(() => {
-    if (admin) {
-      loadData();
-    }
+    if (admin) loadData();
   }, [currentPage, admin, diplomasPagination.page, logsPagination.page, searchTerm]);
 
-  const handleApiError = async (response, context = '') => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (currentPage === 'diplomas') {
+        setDiplomasPagination(prev => ({ ...prev, page: 1 }));
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // API Error Handler
+  const handleApiError = async (response) => {
     if (response.status === 401) {
       toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-      setTimeout(() => {
-        router.push('/admin/login');
-      }, 1500);
+      setTimeout(() => router.push('/admin/login'), 1500);
       return true;
     }
     return false;
   };
 
+  // Auth Functions
   const checkAuth = async () => {
     try {
       const response = await fetch('/api/admin/auth');
-      
       if (response.status === 401) {
         router.push('/admin/login');
         return;
       }
-
       const data = await response.json();
-      
       if (response.ok && data.success) {
         setAdmin(data.admin);
         toast.success(`Chào mừng trở lại, ${data.admin.full_name}! 👋`);
@@ -101,12 +115,10 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadData = async () => {
-    if (currentPage === 'diplomas') {
-      loadDiplomas();
-    } else if (currentPage === 'logs') {
-      loadLogs();
-    }
+  // Data Loading Functions
+  const loadData = () => {
+    if (currentPage === 'diplomas') loadDiplomas();
+    else if (currentPage === 'logs') loadLogs();
   };
 
   const loadDiplomas = async () => {
@@ -116,18 +128,12 @@ export default function AdminDashboard() {
         limit: diplomasPagination.limit.toString(),
         search: searchTerm
       });
-
       const response = await fetch(`/api/admin/diplomas?${params}`);
-      
-      if (await handleApiError(response, 'load diplomas')) return;
-      
+      if (await handleApiError(response)) return;
       const data = await response.json();
       if (data.success) {
         setDiplomas(data.diplomas);
-        setDiplomasPagination(prev => ({
-          ...prev,
-          ...data.pagination
-        }));
+        setDiplomasPagination(prev => ({ ...prev, ...data.pagination }));
       } else {
         toast.error(data.message || 'Không thể tải danh sách văn bằng');
       }
@@ -144,19 +150,13 @@ export default function AdminDashboard() {
         limit: logsPagination.limit.toString(),
         days: '7'
       });
-
       const response = await fetch(`/api/admin/logs?${params}`);
-      
-      if (await handleApiError(response, 'load logs')) return;
-      
+      if (await handleApiError(response)) return;
       const data = await response.json();
       if (data.success) {
         setLogs(data.logs);
         setStats(data.stats);
-        setLogsPagination(prev => ({
-          ...prev,
-          ...data.pagination
-        }));
+        setLogsPagination(prev => ({ ...prev, ...data.pagination }));
       } else {
         toast.error(data.message || 'Không thể tải nhật ký tra cứu');
       }
@@ -166,19 +166,13 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteDiploma = async (id, diplomaNumber) => {
+  // Diploma CRUD Functions
+  const handleDeleteDiploma = async (id) => {
     toast.promise(
       (async () => {
-        const response = await fetch(`/api/admin/diplomas?id=${id}`, {
-          method: 'DELETE'
-        });
-        
-        if (await handleApiError(response, 'delete diploma')) {
-          throw new Error('Session expired');
-        }
-        
+        const response = await fetch(`/api/admin/diplomas?id=${id}`, { method: 'DELETE' });
+        if (await handleApiError(response)) throw new Error('Session expired');
         const data = await response.json();
-        
         if (data.success) {
           loadDiplomas();
           return data.message;
@@ -196,25 +190,16 @@ export default function AdminDashboard() {
 
   const handleSaveDiploma = async (formData) => {
     const isEditing = !!editingDiploma;
-    
     toast.promise(
       (async () => {
-        const url = isEditing 
-          ? `/api/admin/diplomas?id=${editingDiploma.id}`
-          : '/api/admin/diplomas';
-        
+        const url = isEditing ? `/api/admin/diplomas?id=${editingDiploma.id}` : '/api/admin/diplomas';
         const response = await fetch(url, {
           method: isEditing ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData)
         });
-        
-        if (await handleApiError(response, 'save diploma')) {
-          throw new Error('Session expired');
-        }
-        
+        if (await handleApiError(response)) throw new Error('Session expired');
         const data = await response.json();
-        
         if (data.success) {
           setShowModal(false);
           setEditingDiploma(null);
@@ -226,22 +211,17 @@ export default function AdminDashboard() {
       })(),
       {
         loading: isEditing ? 'Đang cập nhật...' : 'Đang thêm văn bằng...',
-        success: (message) => {
-          return isEditing 
-            ? `${message || 'Cập nhật thành công'} ✅` 
-            : `${message || 'Thêm văn bằng thành công'} 🎉`;
-        },
+        success: (message) => isEditing ? `${message || 'Cập nhật thành công'} ✅` : `${message || 'Thêm văn bằng thành công'} 🎉`,
         error: (err) => err.message === 'Session expired' ? '' : (err.message || 'Có lỗi xảy ra')
       }
     );
   };
 
+  // Import Functions
   const handleDownloadTemplate = async () => {
     try {
       const response = await fetch('/api/admin/import');
-      
-      if (await handleApiError(response, 'download template')) return;
-      
+      if (await handleApiError(response)) return;
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -282,39 +262,22 @@ export default function AdminDashboard() {
       toast.error('Vui lòng chọn file Excel');
       return;
     }
-
     setImporting(true);
-
     const formData = new FormData();
     formData.append('file', importFile);
 
     toast.promise(
       (async () => {
-        const response = await fetch('/api/admin/import', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (await handleApiError(response, 'import')) {
-          throw new Error('Session expired');
-        }
-
+        const response = await fetch('/api/admin/import', { method: 'POST', body: formData });
+        if (await handleApiError(response)) throw new Error('Session expired');
         const data = await response.json();
-
         if (data.success) {
           setShowImportModal(false);
           setImportFile(null);
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
+          if (fileInputRef.current) fileInputRef.current.value = '';
           loadDiplomas();
-
           if (data.results.failed > 0) {
-            return {
-              message: data.message,
-              showErrors: true,
-              errors: data.results.errors
-            };
+            return { message: data.message, showErrors: true, errors: data.results.errors };
           }
           return data.message;
         } else {
@@ -330,9 +293,7 @@ export default function AdminDashboard() {
                 <div className="max-h-48 overflow-y-auto">
                   <p className="font-semibold mb-2">Có {result.errors.length} lỗi:</p>
                   {result.errors.slice(0, 5).map((err, idx) => (
-                    <p key={idx} className="text-xs">
-                      Dòng {err.row}: {err.message}
-                    </p>
+                    <p key={idx} className="text-xs">Dòng {err.row}: {err.message}</p>
                   ))}
                   {result.errors.length > 5 && (
                     <p className="text-xs mt-1 italic">... và {result.errors.length - 5} lỗi khác</p>
@@ -350,17 +311,6 @@ export default function AdminDashboard() {
     );
   };
 
-  // Handle search with debounce
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (currentPage === 'diplomas') {
-        setDiplomasPagination(prev => ({ ...prev, page: 1 }));
-      }
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -373,274 +323,48 @@ export default function AdminDashboard() {
     <>
       <Toaster position="top-right" richColors />
       <div className="min-h-screen bg-gray-50 flex">
-        {/* Sidebar - Giữ nguyên như cũ */}
-        <div className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-blue-900 text-white transition-all duration-300 flex flex-col`}>
-          <div className="p-6 border-b border-blue-800 flex items-center justify-between">
-            {sidebarOpen && <h1 className="text-xl font-bold">Admin Panel</h1>}
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-white hover:bg-blue-800 p-2 rounded">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-          </div>
+        <Sidebar
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          admin={admin}
+          handleLogout={handleLogout}
+        />
 
-          <nav className="flex-1 p-4">
-            <button
-              onClick={() => setCurrentPage('diplomas')}
-              className={`w-full flex items-center px-4 py-3 rounded-lg mb-2 transition-colors ${
-                currentPage === 'diplomas' ? 'bg-blue-800' : 'hover:bg-blue-800'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              {sidebarOpen && <span className="ml-3">Quản lý văn bằng</span>}
-            </button>
-
-            <button
-              onClick={() => setCurrentPage('logs')}
-              className={`w-full flex items-center px-4 py-3 rounded-lg mb-2 transition-colors ${
-                currentPage === 'logs' ? 'bg-blue-800' : 'hover:bg-blue-800'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              {sidebarOpen && <span className="ml-3">Nhật ký tra cứu</span>}
-            </button>
-          </nav>
-
-          <div className="p-4 border-t border-blue-800">
-            {sidebarOpen && (
-              <div className="mb-4 text-sm">
-                <p className="font-medium">{admin?.full_name}</p>
-                <p className="text-blue-300 text-xs">{admin?.role}</p>
-              </div>
-            )}
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center px-4 py-3 rounded-lg hover:bg-blue-800 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              {sidebarOpen && <span className="ml-3">Đăng xuất</span>}
-            </button>
-          </div>
-        </div>
-
-        {/* Main Content */}
         <div className="flex-1 overflow-auto">
           <div className="p-8">
-            {/* Diplomas Management */}
             {currentPage === 'diplomas' && (
-              <div>
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-800">Quản lý văn bằng</h2>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Tổng: {diplomasPagination.total} văn bằng
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowImportModal(true)}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center"
-                    >
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      Import Excel
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingDiploma(null);
-                        setShowModal(true);
-                      }}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
-                    >
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Thêm văn bằng
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-lg shadow mb-6 p-4">
-                  <input
-                    type="text"
-                    placeholder="Tìm kiếm theo số hiệu, họ tên, mã SV, ngành..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Số hiệu</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Họ tên</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngành</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Năm TN</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {diplomas.map((diploma) => (
-                        <tr key={diploma.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm font-medium text-gray-900">{diploma.diploma_number}</td>
-                          <td className="px-6 py-4 text-sm text-gray-900">{diploma.full_name}</td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{diploma.major}</td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{diploma.graduation_year}</td>
-                          <td className="px-6 py-4 text-sm">
-                            <button
-                              onClick={() => {
-                                setEditingDiploma(diploma);
-                                setShowModal(true);
-                              }}
-                              className="text-blue-600 hover:text-blue-800 mr-3"
-                            >
-                              Sửa
-                            </button>
-                            <button
-                              onClick={() => {
-                                toast(
-                                  <div>
-                                    <p className="font-medium">Xác nhận xóa văn bằng?</p>
-                                    <p className="text-sm text-gray-600 mt-1">
-                                      Số hiệu: {diploma.diploma_number}
-                                    </p>
-                                  </div>,
-                                  {
-                                    action: {
-                                      label: 'Xóa',
-                                      onClick: () => handleDeleteDiploma(diploma.id, diploma.diploma_number)
-                                    },
-                                    cancel: {
-                                      label: 'Hủy'
-                                    }
-                                  }
-                                );
-                              }}
-                              className="text-red-600 hover:text-red-800"
-                            >
-                              Xóa
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {diplomas.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      Không tìm thấy văn bằng nào
-                    </div>
-                  )}
-                </div>
-
-                {/* Diplomas Pagination */}
-                {diplomasPagination.totalPages > 1 && (
-                  <Pagination
-                    currentPage={diplomasPagination.page}
-                    totalPages={diplomasPagination.totalPages}
-                    onPageChange={(page) => setDiplomasPagination(prev => ({ ...prev, page }))}
-                  />
-                )}
-              </div>
+              <DiplomasTable
+                diplomas={diplomas}
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                pagination={diplomasPagination}
+                onPageChange={(page) => setDiplomasPagination(prev => ({ ...prev, page }))}
+                onEdit={(diploma) => {
+                  setEditingDiploma(diploma);
+                  setShowModal(true);
+                }}
+                onDelete={handleDeleteDiploma}
+                onAddNew={() => {
+                  setEditingDiploma(null);
+                  setShowModal(true);
+                }}
+                onImport={() => setShowImportModal(true)}
+              />
             )}
 
-            {/* Logs Viewer */}
             {currentPage === 'logs' && (
-              <div>
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold text-gray-800">Nhật ký tra cứu</h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Tổng: {logsPagination.total} lượt tra cứu (7 ngày gần nhất)
-                  </p>
-                </div>
-
-                {stats && (
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div className="bg-white rounded-lg shadow p-6">
-                      <div className="text-sm text-gray-500 mb-1">Tổng tra cứu</div>
-                      <div className="text-3xl font-bold text-blue-600">{stats.total}</div>
-                    </div>
-                    <div className="bg-white rounded-lg shadow p-6">
-                      <div className="text-sm text-gray-500 mb-1">Thành công</div>
-                      <div className="text-3xl font-bold text-green-600">{stats.successful}</div>
-                    </div>
-                    <div className="bg-white rounded-lg shadow p-6">
-                      <div className="text-sm text-gray-500 mb-1">Thất bại</div>
-                      <div className="text-3xl font-bold text-red-600">{stats.failed}</div>
-                    </div>
-                    <div className="bg-white rounded-lg shadow p-6">
-                      <div className="text-sm text-gray-500 mb-1">Tỷ lệ thành công</div>
-                      <div className="text-3xl font-bold text-purple-600">
-                        {stats.total > 0 ? Math.round((stats.successful / stats.total) * 100) : 0}%
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Thời gian</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Số hiệu</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">IP</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kết quả</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Response Time</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {logs.map((log) => (
-                        <tr key={log.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 text-sm text-gray-900">
-                            {new Date(log.search_time).toLocaleString('vi-VN')}
-                          </td>
-                          <td className="px-6 py-4 text-sm font-medium text-gray-900">{log.diploma_number}</td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{log.ip_address}</td>
-                          <td className="px-6 py-4 text-sm">
-                            {log.found ? (
-                              <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                Thành công
-                              </span>
-                            ) : (
-                              <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
-                                Thất bại
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{log.response_time_ms}ms</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {logs.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      Chưa có nhật ký tra cứu nào
-                    </div>
-                  )}
-                </div>
-
-                {/* Logs Pagination */}
-                {logsPagination.totalPages > 1 && (
-                  <Pagination
-                    currentPage={logsPagination.page}
-                    totalPages={logsPagination.totalPages}
-                    onPageChange={(page) => setLogsPagination(prev => ({ ...prev, page }))}
-                  />
-                )}
-              </div>
+              <LogsTable
+                logs={logs}
+                stats={stats}
+                pagination={logsPagination}
+                onPageChange={(page) => setLogsPagination(prev => ({ ...prev, page }))}
+              />
             )}
           </div>
         </div>
 
-        {/* Modals */}
         {showModal && (
           <DiplomaModal
             diploma={editingDiploma}
@@ -663,438 +387,11 @@ export default function AdminDashboard() {
             onClose={() => {
               setShowImportModal(false);
               setImportFile(null);
-              if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-              }
+              if (fileInputRef.current) fileInputRef.current.value = '';
             }}
           />
         )}
       </div>
     </>
-  );
-}
-
-// Pagination Component
-function Pagination({ currentPage, totalPages, onPageChange }) {
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisible = 5;
-
-    if (totalPages <= maxVisible) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      if (currentPage <= 3) {
-        for (let i = 1; i <= 4; i++) pages.push(i);
-        pages.push('...');
-        pages.push(totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        pages.push(1);
-        pages.push('...');
-        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
-      } else {
-        pages.push(1);
-        pages.push('...');
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
-        pages.push('...');
-        pages.push(totalPages);
-      }
-    }
-
-    return pages;
-  };
-
-  return (
-    <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 mt-6 rounded-lg shadow">
-      <div className="flex-1 flex justify-between sm:hidden">
-        <button
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Trước
-        </button>
-        <button
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Sau
-        </button>
-      </div>
-      <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm text-gray-700">
-            Trang <span className="font-medium">{currentPage}</span> / <span className="font-medium">{totalPages}</span>
-          </p>
-        </div>
-        <div>
-          <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-            <button
-              onClick={() => onPageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="sr-only">Trước</span>
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-            </button>
-            
-            {getPageNumbers().map((page, index) => (
-              page === '...' ? (
-                <span
-                  key={`ellipsis-${index}`}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700"
-                >
-                  ...
-                </span>
-              ) : (
-                <button
-                  key={page}
-                  onClick={() => onPageChange(page)}
-                  className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                    currentPage === page
-                      ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                      : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                  }`}
-                >
-                  {page}
-                </button>
-              )
-            ))}
-            
-            <button
-              onClick={() => onPageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
-              className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="sr-only">Sau</span>
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </nav>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Import Modal Component
-function ImportModal({ file, importing, fileInputRef, onFileSelect, onDownloadTemplate, onImport, onClose }) {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-xl w-full">
-        <div className="px-6 py-4 border-b flex justify-between items-center">
-          <h3 className="text-xl font-bold text-gray-800">Import văn bằng từ Excel</h3>
-          <button onClick={onClose} disabled={importing} className="text-gray-400 hover:text-gray-600">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="p-6 space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-start">
-              <svg className="w-5 h-5 text-blue-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              <div className="text-sm text-blue-700">
-                <p className="font-medium mb-1">Hướng dẫn:</p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Tải file template mẫu</li>
-                  <li>Điền đầy đủ thông tin vào file Excel</li>
-                  <li>Chọn file và nhấn "Import"</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={onDownloadTemplate}
-            disabled={importing}
-            className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors flex items-center justify-center text-gray-600 hover:text-blue-600 disabled:opacity-50"
-          >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-            </svg>
-            Tải file template mẫu (.xlsx)
-          </button>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Chọn file Excel để import
-            </label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={onFileSelect}
-              disabled={importing}
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            {file && (
-              <div className="mt-2 text-sm text-gray-600 flex items-center">
-                <svg className="w-4 h-4 mr-1 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                {file.name} ({(file.size / 1024).toFixed(2)} KB)
-              </div>
-            )}
-          </div>
-
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
-            <div className="flex items-start">
-              <svg className="w-5 h-5 text-yellow-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              <p>Các văn bằng có số hiệu trùng sẽ bị bỏ qua. Vui lòng kiểm tra kỹ dữ liệu trước khi import.</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-4 border-t flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            disabled={importing}
-            className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            Hủy
-          </button>
-          <button
-            onClick={onImport}
-            disabled={!file || importing}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-          >
-            {importing ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Đang import...
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                Import
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Diploma Modal Component
-function DiplomaModal({ diploma, onClose, onSave }) {
-  const [formData, setFormData] = useState({
-    diploma_number: diploma?.diploma_number || '',
-    registry_number: diploma?.registry_number || '',
-    issue_date: diploma?.issue_date?.split('T')[0] || '',
-    school_name: diploma?.school_name || 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
-    major: diploma?.major || '',
-    specialization: diploma?.specialization || '',
-    student_code: diploma?.student_code || '',
-    full_name: diploma?.full_name || '',
-    training_system: diploma?.training_system || 'Đại học chính quy',
-    graduation_year: diploma?.graduation_year || new Date().getFullYear(),
-    classification: diploma?.classification || ''
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave(formData);
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-          <h3 className="text-xl font-bold text-gray-800">
-            {diploma ? 'Chỉnh sửa văn bằng' : 'Thêm văn bằng mới'}
-          </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Số hiệu văn bằng <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.diploma_number}
-                onChange={(e) => setFormData({...formData, diploma_number: e.target.value})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Số vào sổ <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.registry_number}
-                onChange={(e) => setFormData({...formData, registry_number: e.target.value})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Ngày cấp <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                required
-                value={formData.issue_date}
-                onChange={(e) => setFormData({...formData, issue_date: e.target.value})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Mã sinh viên <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.student_code}
-                onChange={(e) => setFormData({...formData, student_code: e.target.value})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Họ và tên <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.full_name}
-                onChange={(e) => setFormData({...formData, full_name: e.target.value})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Ngành đào tạo <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.major}
-                onChange={(e) => setFormData({...formData, major: e.target.value})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Chuyên ngành
-              </label>
-              <input
-                type="text"
-                value={formData.specialization}
-                onChange={(e) => setFormData({...formData, specialization: e.target.value})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Hệ đào tạo
-              </label>
-              <select
-                value={formData.training_system}
-                onChange={(e) => setFormData({...formData, training_system: e.target.value})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Đại học chính quy">Đại học chính quy</option>
-                <option value="Đại học từ xa">Đại học từ xa</option>
-                <option value="Liên thông">Liên thông</option>
-                <option value="Văn bằng 2">Văn bằng 2</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Năm tốt nghiệp <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                required
-                value={formData.graduation_year}
-                onChange={(e) => setFormData({...formData, graduation_year: parseInt(e.target.value)})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Xếp loại tốt nghiệp
-              </label>
-              <select
-                value={formData.classification}
-                onChange={(e) => setFormData({...formData, classification: e.target.value})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Chọn xếp loại</option>
-                <option value="Xuất sắc">Xuất sắc</option>
-                <option value="Giỏi">Giỏi</option>
-                <option value="Khá">Khá</option>
-                <option value="Trung bình">Trung bình</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tên trường
-              </label>
-              <input
-                type="text"
-                value={formData.school_name}
-                onChange={(e) => setFormData({...formData, school_name: e.target.value})}
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50"
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              {diploma ? 'Cập nhật' : 'Thêm mới'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }
