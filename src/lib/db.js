@@ -4,33 +4,72 @@ import { Pool } from 'pg';
 let pool;
 
 /**
+ * Get SSL configuration based on database URL
+ */
+function getSSLConfig() {
+  const databaseUrl = process.env.DATABASE_URL;
+  
+  if (!databaseUrl) {
+    return false;
+  }
+
+  // Check if URL explicitly disables SSL
+  if (databaseUrl.includes('sslmode=disable')) {
+    return false;
+  }
+
+  // Check if URL explicitly requires SSL
+  if (databaseUrl.includes('sslmode=require')) {
+    return {
+      rejectUnauthorized: false
+    };
+  }
+
+  // Default: try SSL in production, but don't fail if not available
+  if (process.env.NODE_ENV === 'production') {
+    return {
+      rejectUnauthorized: false,
+      // Allow fallback to non-SSL if SSL fails
+      checkServerIdentity: () => undefined
+    };
+  }
+
+  // Development: no SSL
+  return false;
+}
+
+/**
  * Khởi tạo connection pool
  */
 function getPool() {
   if (!pool) {
+    const sslConfig = getSSLConfig();
+    
+    console.log('🔌 Initializing database pool:', {
+      env: process.env.NODE_ENV,
+      ssl: sslConfig ? 'enabled' : 'disabled',
+      hasUrl: !!process.env.DATABASE_URL
+    });
+
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       min: parseInt(process.env.DB_POOL_MIN || '2'),
       max: parseInt(process.env.DB_POOL_MAX || '10'),
       connectionTimeoutMillis: 5000,
       idleTimeoutMillis: 30000,
-      ssl: process.env.NODE_ENV === 'production' ? {
-        rejectUnauthorized: false
-      } : false
+      ssl: sslConfig
     });
 
     // Error handling
     pool.on('error', (err) => {
-      console.error('Unexpected database error:', err);
-      // Không exit process, để app có thể recover
+      console.error('❌ Unexpected database error:', err);
+      // Don't exit process, let app recover
     });
 
-    // Log connection info (chỉ trong development)
-    if (process.env.NODE_ENV === 'development') {
-      pool.on('connect', () => {
-        console.log('✅ Database connected successfully');
-      });
-    }
+    // Log connection info
+    pool.on('connect', () => {
+      console.log('✅ Database connected successfully');
+    });
   }
 
   return pool;
@@ -49,7 +88,7 @@ export async function query(text, params) {
     
     if (process.env.NODE_ENV === 'development') {
       console.log('Executed query', {
-        text,
+        text: text.substring(0, 100),
         duration: `${duration}ms`,
         rows: result.rowCount
       });
@@ -63,6 +102,14 @@ export async function query(text, params) {
       const dbError = new Error('Không thể kết nối đến cơ sở dữ liệu. Vui lòng thử lại sau.');
       dbError.code = 'DB_CONNECTION_ERROR';
       throw dbError;
+    }
+
+    // SSL connection errors
+    if (error.message?.includes('SSL') || error.message?.includes('ssl')) {
+      console.error('❌ SSL connection error:', error.message);
+      const sslError = new Error('Lỗi kết nối database (SSL). Vui lòng kiểm tra cấu hình.');
+      sslError.code = 'DB_SSL_ERROR';
+      throw sslError;
     }
 
     // Check for specific PostgreSQL errors
@@ -143,8 +190,12 @@ export async function closePool() {
  */
 export async function testConnection() {
   try {
-    const result = await query('SELECT NOW() as current_time, current_database() as db_name');
-    console.log('✅ Database connection test successful:', result.rows[0]);
+    const result = await query('SELECT NOW() as current_time, current_database() as db_name, version() as pg_version');
+    console.log('✅ Database connection test successful:', {
+      time: result.rows[0].current_time,
+      database: result.rows[0].db_name,
+      version: result.rows[0].pg_version.split(',')[0]
+    });
     return true;
   } catch (error) {
     console.error('❌ Database connection test failed:', error.message);
@@ -179,7 +230,7 @@ export async function searchDiploma(diplomaNumber) {
 
     return result.rows[0] || null;
   } catch (error) {
-    if (error.code === 'DB_CONNECTION_ERROR') {
+    if (error.code === 'DB_CONNECTION_ERROR' || error.code === 'DB_SSL_ERROR') {
       throw error; // Re-throw để API handler xử lý
     }
     console.error('Search diploma error:', error);
