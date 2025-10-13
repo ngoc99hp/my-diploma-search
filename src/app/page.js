@@ -115,7 +115,7 @@ function SearchForm() {
                 disabled={loading}
               />
               <p className="text-xs text-gray-500 mt-2">
-                Ví dụ: 123456, ABC-2023-001, v.v.
+                Ví dụ: HPU2024-001, HPU2024-002, v.v.
               </p>
             </div>
 
