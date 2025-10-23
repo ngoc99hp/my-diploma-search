@@ -1,4 +1,4 @@
-// src/app/layout.js
+// src/app/layout.js - FULL FAVICON + LOGO TITLE
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -22,6 +22,7 @@ export const metadata = {
     description: "Hệ thống tra cứu và xác thực văn bằng tốt nghiệp trực tuyến",
     type: "website",
     locale: "vi_VN",
+    images: "/images/logoblue.png",  // ✅ OG Image
   },
   robots: {
     index: true,
@@ -31,6 +32,11 @@ export const metadata = {
     // TODO: Thêm Google Search Console verification
     // google: 'your-verification-code',
   },
+  icons: {
+    icon: "/favicon.ico",              // Favicon mặc định
+    shortcut: "/favicon-16x16.png",    // 16x16
+    apple: "/apple-touch-icon.png",    // iOS 180x180
+  },
 };
 
 export default function RootLayout({ children }) {
@@ -39,11 +45,18 @@ export default function RootLayout({ children }) {
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#0083c2" />
-        <link rel="icon" href="/favicon.ico" />
+        
+        {/* FAVICONS */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        
+        {/* SEO META */}
+        <meta name="msapplication-TileColor" content="#0083c2" />
+        <meta name="theme-color" content="#0083c2" />
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
       </body>
     </html>
