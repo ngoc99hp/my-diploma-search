@@ -1,10 +1,9 @@
-// src/app/api/admin/diplomas/route.js
+// src/app/api/admin/diplomas/route.js - Updated for Schema v2
 import { query, logAdminAction } from '@/lib/db';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Verify admin token
 function verifyAdmin(request) {
   const token = request.cookies.get('admin_token')?.value;
   if (!token) {
@@ -14,7 +13,35 @@ function verifyAdmin(request) {
 }
 
 /**
- * GET /api/admin/diplomas - Lấy danh sách văn bằng với pagination
+ * Sinh mã định danh tự động: HPU-YYYY-TYPE-NNNNNN
+ */
+async function generateMaDinhDanh(namTotNghiep, tenVBCC) {
+  let type = 'CNH';
+  if (tenVBCC.includes('Kỹ sư')) type = 'KSU';
+  else if (tenVBCC.includes('Thạc sĩ')) type = 'THS';
+  else if (tenVBCC.includes('Tiến sĩ')) type = 'TSI';
+
+  const result = await query(
+    `SELECT ma_dinh_danh_vbcc 
+     FROM diplomas 
+     WHERE ma_dinh_danh_vbcc LIKE $1 
+     ORDER BY ma_dinh_danh_vbcc DESC 
+     LIMIT 1`,
+    [`HPU-${namTotNghiep}-${type}-%`]
+  );
+
+  let sequence = 1;
+  if (result.rows.length > 0) {
+    const lastCode = result.rows[0].ma_dinh_danh_vbcc;
+    const lastSeq = parseInt(lastCode.split('-')[3]);
+    sequence = lastSeq + 1;
+  }
+
+  return `HPU-${namTotNghiep}-${type}-${sequence.toString().padStart(6, '0')}`;
+}
+
+/**
+ * GET /api/admin/diplomas - Lấy danh sách văn bằng
  */
 export async function GET(request) {
   try {
@@ -26,30 +53,32 @@ export async function GET(request) {
     const search = searchParams.get('search') || '';
     const offset = (page - 1) * limit;
     
-    // Build search query
     let searchCondition = 'WHERE is_active = TRUE';
     let searchValues = [];
     
     if (search) {
       searchCondition += ` AND (
-        diploma_number ILIKE $1 OR 
-        full_name ILIKE $1 OR 
-        student_code ILIKE $1 OR
-        major ILIKE $1
+        so_hieu_vbcc ILIKE $1 OR 
+        ho_va_ten ILIKE $1 OR 
+        ma_nguoi_hoc ILIKE $1 OR
+        nganh_dao_tao ILIKE $1 OR
+        ma_dinh_danh_vbcc ILIKE $1
       )`;
       searchValues.push(`%${search}%`);
     }
     
-    // Get total count for pagination
     const countQuery = `SELECT COUNT(*) as total FROM diplomas ${searchCondition}`;
     const countResult = await query(countQuery, searchValues);
     const total = parseInt(countResult.rows[0].total);
     
-    // Get paginated data
     const dataQuery = `
-      SELECT id, diploma_number, registry_number, issue_date, school_name,
-             major, specialization, student_code, full_name, training_system,
-             graduation_year, classification, is_active, created_at, updated_at
+      SELECT 
+        id, ma_dinh_danh_vbcc, so_hieu_vbcc, 
+        ho_va_ten, ma_nguoi_hoc, ngay_sinh,
+        nganh_dao_tao, chuyen_nganh_dao_tao,
+        xep_loai, nam_tot_nghiep, 
+        hinh_thuc_dao_tao, ngay_cap_vbcc,
+        created_at, updated_at
       FROM diplomas
       ${searchCondition}
       ORDER BY created_at DESC
@@ -71,10 +100,7 @@ export async function GET(request) {
           hasPrev: page > 1
         }
       }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      }
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
@@ -104,11 +130,19 @@ export async function POST(request) {
     
     const data = await request.json();
     
-    // Validate required fields
-    const required = ['diploma_number', 'registry_number', 'issue_date', 'major', 
-                     'student_code', 'full_name', 'graduation_year'];
+    // Validate trường bắt buộc (33 trường)
+    const requiredFields = [
+      'ten_vbcc', 'nganh_dao_tao', 'ma_nganh_dao_tao', 'so_hieu_vbcc',
+      'so_ddcn', 'ma_nguoi_hoc', 'ho_va_ten', 'ngay_sinh', 'noi_sinh', 
+      'gioi_tinh', 'dan_toc', 'nam_tot_nghiep',
+      'so_quyet_dinh_cong_nhan_tot_nghiep', 'ngay_quyet_dinh_cong_nhan_tot_nghiep',
+      'so_vao_so', 'don_vi_cap_bang', 'ma_don_vi_cap_bang',
+      'ho_ten_nguoi_ky_vbcc', 'so_ddcn_nguoi_ky_vbcc', 'chuc_danh_nguoi_ky_vbcc',
+      'ngay_cap_vbcc', 'chuyen_nganh_dao_tao', 'ngon_ngu_dao_tao', 'thoi_gian_dao_tao',
+      'trinh_do_theo_khung_quoc_gia', 'bac_trinh_do_theo_khung_quoc_gia', 'hinh_thuc_dao_tao'
+    ];
     
-    for (const field of required) {
+    for (const field of requiredFields) {
       if (!data[field]) {
         return new Response(
           JSON.stringify({ 
@@ -120,10 +154,10 @@ export async function POST(request) {
       }
     }
 
-    // Check duplicate diploma_number
+    // Kiểm tra trùng số hiệu
     const checkResult = await query(
-      'SELECT id FROM diplomas WHERE diploma_number = $1',
-      [data.diploma_number]
+      'SELECT id FROM diplomas WHERE so_hieu_vbcc = $1',
+      [data.so_hieu_vbcc]
     );
 
     if (checkResult.rows.length > 0) {
@@ -136,26 +170,83 @@ export async function POST(request) {
       );
     }
 
-    // Insert new diploma
+    // Sinh mã định danh tự động
+    const maDinhDanh = await generateMaDinhDanh(data.nam_tot_nghiep, data.ten_vbcc);
+
+    // Lấy ngày hiện tại cho ngay_tao_vbcc
+    const today = new Date();
+    const ngayTaoVBCC = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+
+    // Insert văn bằng mới với tất cả 44 trường
     const result = await query(
       `INSERT INTO diplomas (
-        diploma_number, registry_number, issue_date, school_name,
-        major, specialization, student_code, full_name, training_system,
-        graduation_year, classification
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING id`,
+        phien_ban, thong_tu, ma_dinh_danh_vbcc, ten_vbcc,
+        nganh_dao_tao, ma_nganh_dao_tao, so_hieu_vbcc,
+        so_ddcn, ma_nguoi_hoc, ho_va_ten, ngay_sinh, noi_sinh, gioi_tinh, dan_toc, quoc_tich,
+        ten_truong, ma_co_so_dao_tao, nam_tot_nghiep,
+        so_quyet_dinh_cong_nhan_tot_nghiep, ngay_quyet_dinh_cong_nhan_tot_nghiep,
+        so_quyet_dinh_hoi_dong_danh_gia, so_vao_so, xep_loai,
+        don_vi_cap_bang, ma_don_vi_cap_bang,
+        ho_ten_nguoi_ky_vbcc, so_ddcn_nguoi_ky_vbcc, chuc_danh_nguoi_ky_vbcc,
+        ho_ten_nguoi_ky_vbcc_ban_giay, chuc_danh_nguoi_ky_vbcc_ban_giay,
+        dia_danh_cap_vbcc, ngay_tao_vbcc, ngay_cap_vbcc,
+        chuyen_nganh_dao_tao, ngay_nhap_hoc, ngon_ngu_dao_tao, thoi_gian_dao_tao,
+        tong_so_tin_chi, trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia,
+        hinh_thuc_dao_tao, ghi_chu, attachment_name, attachment_content_base64,
+        created_by
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+        $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+        $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+        $31, $32, $33, $34, $35, $36, $37, $38, $39, $40,
+        $41, $42, $43, $44, $45
+      ) RETURNING id`,
       [
-        data.diploma_number,
-        data.registry_number,
-        data.issue_date,
-        data.school_name || 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
-        data.major,
-        data.specialization || null,
-        data.student_code,
-        data.full_name,
-        data.training_system || 'Đại học chính quy',
-        data.graduation_year,
-        data.classification || null
+        data.phien_ban || '1.0',
+        data.thong_tu || '27/2019',
+        maDinhDanh,
+        data.ten_vbcc,
+        data.nganh_dao_tao,
+        data.ma_nganh_dao_tao,
+        data.so_hieu_vbcc,
+        data.so_ddcn,
+        data.ma_nguoi_hoc,
+        data.ho_va_ten,
+        data.ngay_sinh,
+        data.noi_sinh,
+        data.gioi_tinh,
+        data.dan_toc,
+        data.quoc_tich || 'Việt Nam',
+        data.ten_truong || 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
+        data.ma_co_so_dao_tao || 'HPU01',
+        data.nam_tot_nghiep,
+        data.so_quyet_dinh_cong_nhan_tot_nghiep,
+        data.ngay_quyet_dinh_cong_nhan_tot_nghiep,
+        data.so_quyet_dinh_hoi_dong_danh_gia || null,
+        data.so_vao_so,
+        data.xep_loai || null,
+        data.don_vi_cap_bang,
+        data.ma_don_vi_cap_bang,
+        data.ho_ten_nguoi_ky_vbcc,
+        data.so_ddcn_nguoi_ky_vbcc,
+        data.chuc_danh_nguoi_ky_vbcc,
+        data.ho_ten_nguoi_ky_vbcc_ban_giay || null,
+        data.chuc_danh_nguoi_ky_vbcc_ban_giay || null,
+        data.dia_danh_cap_vbcc || 'Hải Phòng',
+        ngayTaoVBCC,
+        data.ngay_cap_vbcc,
+        data.chuyen_nganh_dao_tao,
+        data.ngay_nhap_hoc || null,
+        data.ngon_ngu_dao_tao,
+        data.thoi_gian_dao_tao,
+        data.tong_so_tin_chi || null,
+        data.trinh_do_theo_khung_quoc_gia,
+        data.bac_trinh_do_theo_khung_quoc_gia,
+        data.hinh_thuc_dao_tao,
+        data.ghi_chu || null,
+        data.attachment_name || null,
+        data.attachment_content_base64 || null,
+        admin.username
       ]
     );
 
@@ -166,8 +257,8 @@ export async function POST(request) {
       'diplomas',
       result.rows[0].id,
       null,
-      data,
-      `Thêm văn bằng mới: ${data.diploma_number}`,
+      { ...data, ma_dinh_danh_vbcc: maDinhDanh },
+      `Thêm văn bằng mới: ${data.so_hieu_vbcc}`,
       ipAddress
     );
 
@@ -175,7 +266,8 @@ export async function POST(request) {
       JSON.stringify({ 
         success: true, 
         message: 'Thêm văn bằng thành công',
-        id: result.rows[0].id
+        id: result.rows[0].id,
+        ma_dinh_danh_vbcc: maDinhDanh
       }),
       { status: 201, headers: { 'Content-Type': 'application/json' } }
     );
@@ -217,11 +309,8 @@ export async function PUT(request) {
 
     const data = await request.json();
 
-    // Get old data for logging
-    const oldDataResult = await query(
-      'SELECT * FROM diplomas WHERE id = $1',
-      [id]
-    );
+    // Get old data
+    const oldDataResult = await query('SELECT * FROM diplomas WHERE id = $1', [id]);
 
     if (oldDataResult.rows.length === 0) {
       return new Response(
@@ -230,35 +319,39 @@ export async function PUT(request) {
       );
     }
 
-    // Update diploma
+    // Update (44 trường, không update ma_dinh_danh_vbcc)
     await query(
       `UPDATE diplomas SET
-        diploma_number = $1,
-        registry_number = $2,
-        issue_date = $3,
-        school_name = $4,
-        major = $5,
-        specialization = $6,
-        student_code = $7,
-        full_name = $8,
-        training_system = $9,
-        graduation_year = $10,
-        classification = $11,
-        updated_at = NOW()
-      WHERE id = $12`,
+        ten_vbcc = $1, nganh_dao_tao = $2, ma_nganh_dao_tao = $3, so_hieu_vbcc = $4,
+        so_ddcn = $5, ma_nguoi_hoc = $6, ho_va_ten = $7, ngay_sinh = $8, noi_sinh = $9,
+        gioi_tinh = $10, dan_toc = $11, quoc_tich = $12, ten_truong = $13, ma_co_so_dao_tao = $14,
+        nam_tot_nghiep = $15, so_quyet_dinh_cong_nhan_tot_nghiep = $16, ngay_quyet_dinh_cong_nhan_tot_nghiep = $17,
+        so_quyet_dinh_hoi_dong_danh_gia = $18, so_vao_so = $19, xep_loai = $20,
+        don_vi_cap_bang = $21, ma_don_vi_cap_bang = $22, ho_ten_nguoi_ky_vbcc = $23,
+        so_ddcn_nguoi_ky_vbcc = $24, chuc_danh_nguoi_ky_vbcc = $25,
+        ho_ten_nguoi_ky_vbcc_ban_giay = $26, chuc_danh_nguoi_ky_vbcc_ban_giay = $27,
+        dia_danh_cap_vbcc = $28, ngay_cap_vbcc = $29, chuyen_nganh_dao_tao = $30,
+        ngay_nhap_hoc = $31, ngon_ngu_dao_tao = $32, thoi_gian_dao_tao = $33,
+        tong_so_tin_chi = $34, trinh_do_theo_khung_quoc_gia = $35, bac_trinh_do_theo_khung_quoc_gia = $36,
+        hinh_thuc_dao_tao = $37, ghi_chu = $38, attachment_name = $39, attachment_content_base64 = $40,
+        updated_by = $41, updated_at = NOW()
+      WHERE id = $42`,
       [
-        data.diploma_number,
-        data.registry_number,
-        data.issue_date,
-        data.school_name || 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
-        data.major,
-        data.specialization || null,
-        data.student_code,
-        data.full_name,
-        data.training_system || 'Đại học chính quy',
-        data.graduation_year,
-        data.classification || null,
-        id
+        data.ten_vbcc, data.nganh_dao_tao, data.ma_nganh_dao_tao, data.so_hieu_vbcc,
+        data.so_ddcn, data.ma_nguoi_hoc, data.ho_va_ten, data.ngay_sinh, data.noi_sinh,
+        data.gioi_tinh, data.dan_toc, data.quoc_tich || 'Việt Nam', 
+        data.ten_truong || 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
+        data.ma_co_so_dao_tao || 'HPU01',
+        data.nam_tot_nghiep, data.so_quyet_dinh_cong_nhan_tot_nghiep, data.ngay_quyet_dinh_cong_nhan_tot_nghiep,
+        data.so_quyet_dinh_hoi_dong_danh_gia || null, data.so_vao_so, data.xep_loai || null,
+        data.don_vi_cap_bang, data.ma_don_vi_cap_bang, data.ho_ten_nguoi_ky_vbcc,
+        data.so_ddcn_nguoi_ky_vbcc, data.chuc_danh_nguoi_ky_vbcc,
+        data.ho_ten_nguoi_ky_vbcc_ban_giay || null, data.chuc_danh_nguoi_ky_vbcc_ban_giay || null,
+        data.dia_danh_cap_vbcc || 'Hải Phòng', data.ngay_cap_vbcc, data.chuyen_nganh_dao_tao,
+        data.ngay_nhap_hoc || null, data.ngon_ngu_dao_tao, data.thoi_gian_dao_tao,
+        data.tong_so_tin_chi || null, data.trinh_do_theo_khung_quoc_gia, data.bac_trinh_do_theo_khung_quoc_gia,
+        data.hinh_thuc_dao_tao, data.ghi_chu || null, data.attachment_name || null, data.attachment_content_base64 || null,
+        admin.username, id
       ]
     );
 
@@ -270,7 +363,7 @@ export async function PUT(request) {
       id,
       oldDataResult.rows[0],
       data,
-      `Cập nhật văn bằng: ${data.diploma_number}`,
+      `Cập nhật văn bằng: ${data.so_hieu_vbcc}`,
       ipAddress
     );
 
@@ -314,11 +407,7 @@ export async function DELETE(request) {
       );
     }
 
-    // Get data before delete for logging
-    const dataResult = await query(
-      'SELECT * FROM diplomas WHERE id = $1',
-      [id]
-    );
+    const dataResult = await query('SELECT * FROM diplomas WHERE id = $1', [id]);
 
     if (dataResult.rows.length === 0) {
       return new Response(
@@ -327,13 +416,8 @@ export async function DELETE(request) {
       );
     }
 
-    // Soft delete
-    await query(
-      'UPDATE diplomas SET is_active = FALSE, updated_at = NOW() WHERE id = $1',
-      [id]
-    );
+    await query('UPDATE diplomas SET is_active = FALSE, updated_at = NOW() WHERE id = $1', [id]);
 
-    // Log action
     await logAdminAction(
       admin.id,
       'DELETE',
@@ -341,7 +425,7 @@ export async function DELETE(request) {
       id,
       dataResult.rows[0],
       null,
-      `Xóa văn bằng: ${dataResult.rows[0].diploma_number}`,
+      `Xóa văn bằng: ${dataResult.rows[0].so_hieu_vbcc}`,
       ipAddress
     );
 

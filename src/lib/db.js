@@ -1,11 +1,8 @@
-// lib/db.js
+// lib/db.js - Updated for Schema v2.0
 import { Pool } from 'pg';
 
 let pool;
 
-/**
- * Get SSL configuration based on database URL
- */
 function getSSLConfig() {
   const databaseUrl = process.env.DATABASE_URL;
   
@@ -13,34 +10,26 @@ function getSSLConfig() {
     return false;
   }
 
-  // Check if URL explicitly disables SSL
   if (databaseUrl.includes('sslmode=disable')) {
     return false;
   }
 
-  // Check if URL explicitly requires SSL
   if (databaseUrl.includes('sslmode=require')) {
     return {
       rejectUnauthorized: false
     };
   }
 
-  // Default: try SSL in production, but don't fail if not available
   if (process.env.NODE_ENV === 'production') {
     return {
       rejectUnauthorized: false,
-      // Allow fallback to non-SSL if SSL fails
       checkServerIdentity: () => undefined
     };
   }
 
-  // Development: no SSL
   return false;
 }
 
-/**
- * Khởi tạo connection pool
- */
 function getPool() {
   if (!pool) {
     const sslConfig = getSSLConfig();
@@ -60,13 +49,10 @@ function getPool() {
       ssl: sslConfig
     });
 
-    // Error handling
     pool.on('error', (err) => {
       console.error('❌ Unexpected database error:', err);
-      // Don't exit process, let app recover
     });
 
-    // Log connection info
     pool.on('connect', () => {
       console.log('✅ Database connected successfully');
     });
@@ -75,9 +61,6 @@ function getPool() {
   return pool;
 }
 
-/**
- * Thực thi query với error handling tốt hơn
- */
 export async function query(text, params) {
   const start = Date.now();
   const client = getPool();
@@ -96,7 +79,6 @@ export async function query(text, params) {
     
     return result;
   } catch (error) {
-    // Check if database is down
     if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
       console.error('❌ Database connection failed:', error.message);
       const dbError = new Error('Không thể kết nối đến cơ sở dữ liệu. Vui lòng thử lại sau.');
@@ -104,7 +86,6 @@ export async function query(text, params) {
       throw dbError;
     }
 
-    // SSL connection errors
     if (error.message?.includes('SSL') || error.message?.includes('ssl')) {
       console.error('❌ SSL connection error:', error.message);
       const sslError = new Error('Lỗi kết nối database (SSL). Vui lòng kiểm tra cấu hình.');
@@ -112,14 +93,13 @@ export async function query(text, params) {
       throw sslError;
     }
 
-    // Check for specific PostgreSQL errors
-    if (error.code === '23505') { // Unique violation
+    if (error.code === '23505') {
       const duplicateError = new Error('Dữ liệu đã tồn tại trong hệ thống');
       duplicateError.code = 'DUPLICATE_ERROR';
       throw duplicateError;
     }
 
-    if (error.code === '23503') { // Foreign key violation
+    if (error.code === '23503') {
       const fkError = new Error('Không thể thực hiện thao tác do ràng buộc dữ liệu');
       fkError.code = 'FK_VIOLATION';
       throw fkError;
@@ -136,9 +116,6 @@ export async function query(text, params) {
   }
 }
 
-/**
- * Lấy một client từ pool (dùng cho transactions)
- */
 export async function getClient() {
   const client = await getPool().connect();
   
@@ -155,9 +132,6 @@ export async function getClient() {
   return client;
 }
 
-/**
- * Transaction helper
- */
 export async function transaction(callback) {
   const client = await getClient();
   
@@ -174,9 +148,6 @@ export async function transaction(callback) {
   }
 }
 
-/**
- * Đóng pool connection
- */
 export async function closePool() {
   if (pool) {
     await pool.end();
@@ -185,9 +156,6 @@ export async function closePool() {
   }
 }
 
-/**
- * Kiểm tra kết nối database
- */
 export async function testConnection() {
   try {
     const result = await query('SELECT NOW() as current_time, current_database() as db_name, version() as pg_version');
@@ -204,36 +172,105 @@ export async function testConnection() {
 }
 
 /**
- * Tìm kiếm văn bằng theo số hiệu
+ * Tìm kiếm văn bằng theo số hiệu (Schema v2)
  */
-export async function searchDiploma(diplomaNumber) {
+export async function searchDiplomaByNumber(soHieuVBCC) {
   try {
     const result = await query(
       `SELECT 
-        diploma_number,
-        registry_number,
-        issue_date,
-        school_name,
-        major,
-        specialization,
-        student_code,
-        full_name,
-        training_system,
-        graduation_year,
-        classification
+        ma_dinh_danh_vbcc,
+        so_hieu_vbcc,
+        ho_va_ten,
+        ngay_sinh,
+        noi_sinh,
+        gioi_tinh,
+        ma_nguoi_hoc,
+        nganh_dao_tao,
+        chuyen_nganh_dao_tao,
+        xep_loai,
+        nam_tot_nghiep,
+        hinh_thuc_dao_tao,
+        thoi_gian_dao_tao,
+        don_vi_cap_bang,
+        ngay_cap_vbcc,
+        dia_danh_cap_vbcc,
+        trinh_do_theo_khung_quoc_gia,
+        bac_trinh_do_theo_khung_quoc_gia
       FROM diplomas
-      WHERE diploma_number = $1
+      WHERE so_hieu_vbcc = $1
       AND is_active = TRUE
       LIMIT 1`,
-      [diplomaNumber]
+      [soHieuVBCC]
     );
 
     return result.rows[0] || null;
   } catch (error) {
     if (error.code === 'DB_CONNECTION_ERROR' || error.code === 'DB_SSL_ERROR') {
-      throw error; // Re-throw để API handler xử lý
+      throw error;
     }
     console.error('Search diploma error:', error);
+    throw new Error('Lỗi khi tra cứu văn bằng');
+  }
+}
+
+/**
+ * Tìm kiếm văn bằng theo Mã SV + Họ tên/Ngày sinh
+ */
+export async function searchDiplomaCombo(maNguoiHoc, hoVaTen = null, ngaySinh = null) {
+  try {
+    // Phải có ít nhất 1 trong 2: họ tên hoặc ngày sinh
+    if (!hoVaTen && !ngaySinh) {
+      throw new Error('Vui lòng nhập thêm Họ tên hoặc Ngày sinh');
+    }
+
+    let queryText = `
+      SELECT 
+        ma_dinh_danh_vbcc,
+        so_hieu_vbcc,
+        ho_va_ten,
+        ngay_sinh,
+        noi_sinh,
+        gioi_tinh,
+        ma_nguoi_hoc,
+        nganh_dao_tao,
+        chuyen_nganh_dao_tao,
+        xep_loai,
+        nam_tot_nghiep,
+        hinh_thuc_dao_tao,
+        thoi_gian_dao_tao,
+        don_vi_cap_bang,
+        ngay_cap_vbcc,
+        dia_danh_cap_vbcc,
+        trinh_do_theo_khung_quoc_gia,
+        bac_trinh_do_theo_khung_quoc_gia
+      FROM diplomas
+      WHERE ma_nguoi_hoc = $1
+      AND is_active = TRUE
+    `;
+
+    const params = [maNguoiHoc];
+    let paramIndex = 2;
+
+    if (hoVaTen) {
+      queryText += ` AND UPPER(ho_va_ten) = UPPER($${paramIndex})`;
+      params.push(hoVaTen);
+      paramIndex++;
+    }
+
+    if (ngaySinh) {
+      queryText += ` AND ngay_sinh = $${paramIndex}`;
+      params.push(ngaySinh);
+    }
+
+    queryText += ' LIMIT 1';
+
+    const result = await query(queryText, params);
+    return result.rows[0] || null;
+  } catch (error) {
+    if (error.code === 'DB_CONNECTION_ERROR' || error.code === 'DB_SSL_ERROR') {
+      throw error;
+    }
+    console.error('Search diploma combo error:', error);
     throw new Error('Lỗi khi tra cứu văn bằng');
   }
 }
@@ -247,15 +284,18 @@ export async function logSearch(diplomaNumber, ipAddress, userAgent, found, resp
   }
 
   try {
+    // Hash search value để bảo mật
+    const crypto = await import('crypto');
+    const searchHash = crypto.createHash('sha256').update(diplomaNumber).digest('hex');
+
     await query(
       `INSERT INTO search_logs 
-        (diploma_number, ip_address, user_agent, found, response_time_ms, captcha_score, captcha_status, error_message)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [diplomaNumber, ipAddress, userAgent, found, responseTimeMs, captchaScore, captchaStatus, errorMessage]
+        (ip_address, user_agent, search_type, search_value_hash, found, response_time_ms, captcha_score, captcha_status, error_message)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [ipAddress, userAgent, 'so_hieu', searchHash, found, responseTimeMs, captchaScore, captchaStatus, errorMessage]
     );
   } catch (error) {
     console.error('Failed to log search:', error);
-    // Không throw error để không ảnh hưởng đến chức năng chính
   }
 }
 
@@ -265,7 +305,7 @@ export async function logSearch(diplomaNumber, ipAddress, userAgent, found, resp
 export async function checkRateLimit(ipAddress) {
   try {
     const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '3600000');
-    const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100');
+    const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '30');
     const windowStart = new Date(Date.now() - windowMs);
     
     const result = await query(
@@ -285,7 +325,6 @@ export async function checkRateLimit(ipAddress) {
     };
   } catch (error) {
     console.error('Rate limit check error:', error);
-    // Fail-open: cho phép request nếu không check được
     return {
       allowed: true,
       remaining: 100,
@@ -293,27 +332,6 @@ export async function checkRateLimit(ipAddress) {
       resetAt: new Date(Date.now() + 3600000)
     };
   }
-}
-
-/**
- * Lấy thống kê tra cứu
- */
-export async function getSearchStats(days = 7) {
-  const result = await query(
-    `SELECT 
-      DATE(search_time) as date,
-      COUNT(*) as total_searches,
-      COUNT(CASE WHEN found = TRUE THEN 1 END) as successful,
-      COUNT(CASE WHEN found = FALSE THEN 1 END) as failed,
-      COUNT(DISTINCT ip_address) as unique_visitors
-    FROM search_logs
-    WHERE search_time >= CURRENT_DATE - INTERVAL '1 day' * $1
-    GROUP BY DATE(search_time)
-    ORDER BY date DESC`,
-    [days]
-  );
-
-  return result.rows;
 }
 
 /**
@@ -351,9 +369,9 @@ export default {
   transaction,
   closePool,
   testConnection,
-  searchDiploma,
+  searchDiplomaByNumber,
+  searchDiplomaCombo,
   logSearch,
   checkRateLimit,
-  getSearchStats,
   logAdminAction
 };
