@@ -142,7 +142,7 @@ function SearchForm() {
               {/* TITLE */}
               <div>
                 <h1 className="text-2xl font-bold text-gray-800">
-                  Hệ thống tra cứu văn bằng số
+                  Hệ thống tra cứu thông tin văn bằng
                 </h1>
                 <p className="text-sm text-gray-600">
                   Trường Đại học Quản lý và Công nghệ Hải Phòng
@@ -573,7 +573,7 @@ function SearchForm() {
         {/* Footer info */}
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-600 font-medium">
-            Hệ thống tra cứu văn bằng số - Trường Đại học Quản lý và Công nghệ
+            Hệ thống tra cứu thông tin văn bằng - Trường Đại học Quản lý và Công nghệ
             Hải Phòng
           </p>
           <p className="text-xs text-gray-500 mt-2">

@@ -40,3 +40,23 @@ LIMIT 10;
 -- ============================================
 
 SELECT '✅ Migration completed successfully!' AS status;
+
+
+-- Bước 1: Thêm cột tạm với kiểu timestamptz
+ALTER TABLE public.search_logs 
+ADD COLUMN search_time_tz timestamptz DEFAULT CURRENT_TIMESTAMP;
+
+-- Bước 2: Copy dữ liệu cũ (tự động convert theo múi giờ)
+UPDATE public.search_logs 
+SET search_time_tz = search_time AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Ho_Chi_Minh';
+
+-- Bước 3: Drop cột cũ và rename
+ALTER TABLE public.search_logs DROP COLUMN search_time;
+ALTER TABLE public.search_logs RENAME COLUMN search_time_tz TO search_time;
+
+-- Bước 4: Tạo lại indexes
+DROP INDEX IF EXISTS idx_search_time;
+DROP INDEX IF EXISTS idx_search_ip;
+
+CREATE INDEX idx_search_time ON public.search_logs USING btree (search_time);
+CREATE INDEX idx_search_ip ON public.search_logs USING btree (ip_address, search_time);

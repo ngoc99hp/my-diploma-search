@@ -400,3 +400,50 @@ export default {
   checkRateLimit,
   logAdminAction
 };
+
+// BACKGROUND LOG QUEUE
+let logQueue = [];
+let flushInterval;
+
+function startLogQueue() {
+  if (flushInterval) return;
+  flushInterval = setInterval(flushLogs, 1000);
+}
+
+function flushLogs() {
+  if (logQueue.length === 0) return;
+  const batch = logQueue.splice(0, logQueue.length);
+  batchLog(batch).catch(console.error);
+}
+
+async function batchLog(logs) {
+  if (logs.length === 0) return;
+  
+  const values = logs.map(log => `(
+    '${log.ipAddress}', 
+    ${log.userAgent ? `'${log.userAgent.replace(/'/g, "''")}'` : 'NULL'}, 
+    '${log.searchType}', 
+    ${log.diplomaNumber ? `'${log.diplomaNumber}'` : 'NULL'}, 
+    '${log.searchHash}', 
+    ${log.found}, 
+    ${log.responseTimeMs}, 
+    ${log.captchaScore ? log.captchaScore : 'NULL'}, 
+    ${log.captchaStatus ? `'${log.captchaStatus}'` : 'NULL'}, 
+    ${log.errorMessage ? `'${log.errorMessage.replace(/'/g, "''")}'` : 'NULL'}
+  )`).join(',');
+  
+  await query(`
+    INSERT INTO search_logs 
+    (ip_address, user_agent, search_type, diploma_number, search_value_hash, 
+     found, response_time_ms, captcha_score, captcha_status, error_message)
+    VALUES ${values}
+  `);
+}
+
+export function queueLog(logData) {
+  logQueue.push(logData);
+  if (logQueue.length >= 10) flushLogs();
+}
+
+// START QUEUE
+startLogQueue();
