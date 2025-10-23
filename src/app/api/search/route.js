@@ -1,6 +1,5 @@
-// src/app/api/search/route.js - ULTRA FAST v2.1 (45ms)
-import { searchDiplomaByNumber, searchDiplomaCombo, queueLog, checkRateLimit } from '@/lib/db';
-import { verifyRecaptcha } from '@/lib/cache';
+// src/app/api/search/route.js - Updated for Schema v2
+import { searchDiplomaByNumber, searchDiplomaCombo, logSearch, checkRateLimit } from '@/lib/db';
 
 export async function POST(request) {
   const startTime = Date.now();
@@ -14,117 +13,144 @@ export async function POST(request) {
                      'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
-    // 🔥 VALIDATION FAST (Giữ nguyên logic)
+    // Validate search type
     if (!searchType || !['so_hieu', 'combo'].includes(searchType)) {
-      queueLog({
-        ipAddress, userAgent, searchType: 'invalid', 
-        diplomaNumber: 'unknown', found: false, 
-        responseTimeMs: Date.now() - startTime
-      });
-      return Response.json({ 
-        success: false,
-        message: 'Loại tra cứu không hợp lệ' 
-      }, { status: 400 });
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: 'Loại tra cứu không hợp lệ' 
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
-    let searchValue = '';
+    // Validate input theo search type
     if (searchType === 'so_hieu') {
-      searchValue = (soHieuVBCC || '').trim();
-      if (!searchValue) {
-        queueLog({
-          ipAddress, userAgent, searchType, 
-          diplomaNumber: searchValue, found: false, 
-          responseTimeMs: Date.now() - startTime,
-          errorMessage: 'Missing so_hieu'
-        });
-        return Response.json({ 
-          success: false,
-          message: 'Vui lòng nhập số hiệu văn bằng' 
-        }, { status: 400 });
+      if (!soHieuVBCC || !soHieuVBCC.trim()) {
+        await logSearch(soHieuVBCC || 'unknown', ipAddress, userAgent, false, Date.now() - startTime, null, 'failed', 'Missing so_hieu');
+        return new Response(
+          JSON.stringify({ 
+            success: false,
+            message: 'Vui lòng nhập số hiệu văn bằng' 
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
       }
     } else if (searchType === 'combo') {
-      searchValue = (maNguoiHoc || '').trim();
-      if (!searchValue) {
-        return Response.json({ 
-          success: false,
-          message: 'Vui lòng nhập mã sinh viên' 
-        }, { status: 400 });
+      if (!maNguoiHoc || !maNguoiHoc.trim()) {
+        return new Response(
+          JSON.stringify({ 
+            success: false,
+            message: 'Vui lòng nhập mã sinh viên' 
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
       }
 
+      // Phải có ít nhất 1 trong 2: họ tên hoặc ngày sinh
       if ((!hoVaTen || !hoVaTen.trim()) && (!ngaySinh || !ngaySinh.trim())) {
-        return Response.json({ 
-          success: false,
-          message: 'Vui lòng nhập thêm Họ tên hoặc Ngày sinh' 
-        }, { status: 400 });
+        return new Response(
+          JSON.stringify({ 
+            success: false,
+            message: 'Vui lòng nhập thêm Họ tên hoặc Ngày sinh' 
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
       }
     }
 
-    // 🔥 reCAPTCHA CACHED (0ms cho 99% users)
+    // Verify reCAPTCHA
     if (!recaptchaToken) {
-      queueLog({
-        ipAddress, userAgent, searchType, 
-        diplomaNumber: searchValue, found: false, 
-        responseTimeMs: Date.now() - startTime,
-        errorMessage: 'Missing CAPTCHA token'
-      });
-      return Response.json({ 
-        success: false,
-        message: 'Thiếu token CAPTCHA. Vui lòng tải lại trang và thử lại.' 
-      }, { status: 403 });
+      await logSearch('unknown', ipAddress, userAgent, false, Date.now() - startTime, null, 'failed', 'Missing CAPTCHA token');
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: 'Thiếu token CAPTCHA. Vui lòng tải lại trang và thử lại.' 
+        }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
-    const captchaData = await verifyRecaptcha(recaptchaToken, ipAddress);
+    const verifyUrl = `https://www.google.com/recaptcha/api/siteverify`;
+    const captchaResponse = await fetch(verifyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        secret: process.env.RECAPTCHA_SECRET_KEY,
+        response: recaptchaToken,
+        remoteip: ipAddress,
+      }),
+    });
+
+    const captchaData = await captchaResponse.json();
     if (!captchaData.success || captchaData.score < 0.5) {
-      queueLog({
-        ipAddress, userAgent, searchType, 
-        diplomaNumber: searchValue, found: false, 
-        responseTimeMs: Date.now() - startTime,
-        captchaScore: captchaData.score,
-        errorMessage: 'CAPTCHA verification failed'
-      });
-      return Response.json({ 
-        success: false,
-        message: 'Xác minh CAPTCHA thất bại. Vui lòng thử lại.' 
-      }, { status: 403 });
+      const searchValue = searchType === 'so_hieu' ? soHieuVBCC : maNguoiHoc;
+      await logSearch(
+        searchValue?.trim() || 'unknown',
+        ipAddress,
+        userAgent,
+        false,
+        Date.now() - startTime,
+        captchaData.score || null,
+        'failed',
+        'CAPTCHA verification failed'
+      );
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: 'Xác minh CAPTCHA thất bại. Vui lòng thử lại.' 
+        }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
-    // 🔥 RATE LIMIT (20ms với index mới)
-    let rateLimitStatus = { allowed: true };
+    // Kiểm tra rate limit
     try {
-      rateLimitStatus = await checkRateLimit(ipAddress);
+      const rateLimitStatus = await checkRateLimit(ipAddress);
       
       if (!rateLimitStatus.allowed) {
-        queueLog({
-          ipAddress, userAgent, searchType, 
-          diplomaNumber: searchValue, found: false, 
-          responseTimeMs: Date.now() - startTime,
-          captchaScore: captchaData.score,
-          errorMessage: 'Rate limit exceeded'
-        });
-        return Response.json({ 
-          success: false,
-          message: 'Bạn đã vượt quá số lần tra cứu cho phép. Vui lòng thử lại sau.',
-          rateLimitExceeded: true,
-          retryAfter: rateLimitStatus.resetAt
-        }, {
-          status: 429,
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-RateLimit-Limit': rateLimitStatus.limit.toString(),
-            'X-RateLimit-Remaining': rateLimitStatus.remaining.toString(),
-            'X-RateLimit-Reset': rateLimitStatus.resetAt.toISOString()
-          },
-        });
+        const searchValue = searchType === 'so_hieu' ? soHieuVBCC : maNguoiHoc;
+        await logSearch(
+          searchValue?.trim() || 'unknown',
+          ipAddress,
+          userAgent,
+          false,
+          Date.now() - startTime,
+          captchaData.score,
+          'failed',
+          'Rate limit exceeded'
+        );
+        return new Response(
+          JSON.stringify({ 
+            success: false,
+            message: 'Bạn đã vượt quá số lần tra cứu cho phép. Vui lòng thử lại sau.',
+            rateLimitExceeded: true,
+            retryAfter: rateLimitStatus.resetAt
+          }),
+          {
+            status: 429,
+            headers: { 
+              'Content-Type': 'application/json',
+              'X-RateLimit-Limit': rateLimitStatus.limit.toString(),
+              'X-RateLimit-Remaining': rateLimitStatus.remaining.toString(),
+              'X-RateLimit-Reset': rateLimitStatus.resetAt.toISOString()
+            },
+          }
+        );
       }
     } catch (rateLimitError) {
       console.error('Rate limit check failed:', rateLimitError);
     }
 
-    // 🔥 DB SEARCH ULTRA FAST (20ms)
+    // Tìm kiếm trong database
     let result = null;
+    let searchValue = '';
+
     if (searchType === 'so_hieu') {
+      searchValue = soHieuVBCC.trim();
       result = await searchDiplomaByNumber(searchValue);
-    } else {
+    } else if (searchType === 'combo') {
+      searchValue = maNguoiHoc.trim();
       result = await searchDiplomaCombo(
         searchValue,
         hoVaTen?.trim() || null,
@@ -134,46 +160,53 @@ export async function POST(request) {
     
     const responseTime = Date.now() - startTime;
 
-    // 🔥 BACKGROUND LOG (0ms - KHÔNG BLOCK!)
-    queueLog({
+    // Log tra cứu
+    await logSearch(
+      searchValue,
       ipAddress,
       userAgent,
-      searchType,
-      diplomaNumber: searchValue,
-      found: !!result,
-      responseTimeMs: responseTime,
-      captchaScore: captchaData.score,
-      captchaStatus: !!result ? 'success' : 'not_found'
-    });
+      !!result,
+      responseTime,
+      captchaData.score,
+      'success'
+    );
 
-    // 🔥 RESPONSE FAST
+    // Nếu tìm thấy
     if (result) {
       const responseData = {
         success: true,
         data: {
-          // Schema v2.0 - 21 fields
+          // Thông tin định danh
           ma_dinh_danh_vbcc: result.ma_dinh_danh_vbcc,
           so_hieu_vbcc: result.so_hieu_vbcc,
+          
+          // Thông tin sinh viên (ẩn CCCD)
           ho_va_ten: result.ho_va_ten,
           ngay_sinh: result.ngay_sinh,
           noi_sinh: result.noi_sinh,
           gioi_tinh: result.gioi_tinh,
           ma_nguoi_hoc: result.ma_nguoi_hoc,
+          
+          // Thông tin văn bằng
           nganh_dao_tao: result.nganh_dao_tao,
           chuyen_nganh_dao_tao: result.chuyen_nganh_dao_tao,
           xep_loai: result.xep_loai,
           nam_tot_nghiep: result.nam_tot_nghiep,
+          
+          // Thông tin đào tạo
           hinh_thuc_dao_tao: result.hinh_thuc_dao_tao,
           thoi_gian_dao_tao: result.thoi_gian_dao_tao,
           trinh_do_theo_khung_quoc_gia: result.trinh_do_theo_khung_quoc_gia,
           bac_trinh_do_theo_khung_quoc_gia: result.bac_trinh_do_theo_khung_quoc_gia,
+          
+          // Thông tin cấp bằng
           don_vi_cap_bang: result.don_vi_cap_bang,
           ngay_cap_vbcc: result.ngay_cap_vbcc,
           dia_danh_cap_vbcc: result.dia_danh_cap_vbcc
         }
       };
 
-      return Response.json(responseData, {
+      return new Response(JSON.stringify(responseData), {
         status: 200,
         headers: { 
           'Content-Type': 'application/json',
@@ -182,10 +215,14 @@ export async function POST(request) {
       });
     }
 
-    return Response.json({ 
-      success: false,
-      message: 'Không tìm thấy thông tin văn bằng phù hợp!' 
-    }, { status: 404 });
+    // Nếu không tìm thấy
+    return new Response(
+      JSON.stringify({ 
+        success: false,
+        message: 'Không tìm thấy thông tin văn bằng phù hợp!' 
+      }),
+      { status: 404, headers: { 'Content-Type': 'application/json' } }
+    );
 
   } catch (error) {
     console.error('Search API Error:', {
@@ -195,42 +232,58 @@ export async function POST(request) {
     });
 
     if (error.code === 'DB_CONNECTION_ERROR') {
-      return Response.json({ 
-        success: false,
-        message: 'Hệ thống đang bảo trì. Vui lòng thử lại sau ít phút.',
-        errorType: 'database_connection'
-      }, { status: 503 });
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          message: 'Hệ thống đang bảo trì. Vui lòng thử lại sau ít phút.',
+          errorType: 'database_connection'
+        }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      );
     }
     
-    // 🔥 ERROR LOGGING (BACKGROUND)
-    queueLog({
-      ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
-      userAgent: request.headers.get('user-agent') || 'unknown',
-      searchType: 'error',
-      diplomaNumber: body?.soHieuVBCC || body?.maNguoiHoc || 'unknown',
-      found: false,
-      responseTimeMs: Date.now() - startTime,
-      errorMessage: `Server error: ${error.message}`
-    });
+    try {
+      const ipAddress = request.headers.get('x-forwarded-for') || 'unknown';
+      const userAgent = request.headers.get('user-agent') || 'unknown';
+      const body = await request.json().catch(() => ({}));
+      
+      await logSearch(
+        body.soHieuVBCC?.trim() || body.maNguoiHoc?.trim() || 'unknown',
+        ipAddress,
+        userAgent,
+        false,
+        Date.now() - startTime,
+        null,
+        'failed',
+        `Server error: ${error.message}`
+      );
+    } catch (logError) {
+      console.error('Failed to log error:', logError);
+    }
 
     const errorMessage = process.env.NODE_ENV === 'development' 
       ? error.message 
       : 'Đã có lỗi xảy ra, vui lòng thử lại';
 
-    return Response.json({ 
-      success: false,
-      message: errorMessage,
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    }, { status: 500 });
+    return new Response(
+      JSON.stringify({ 
+        success: false,
+        message: errorMessage,
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }
 
 export async function GET() {
-  return Response.json({ 
-    status: 'ok',
-    message: 'Diploma Search API v2.1 ULTRA FAST is running',
-    timestamp: new Date().toISOString(),
-    supportedSearchTypes: ['so_hieu', 'combo'],
-    performance: '45ms guaranteed'
-  }, { status: 200 });
+  return new Response(
+    JSON.stringify({ 
+      status: 'ok',
+      message: 'Diploma Search API v2.0 is running',
+      timestamp: new Date().toISOString(),
+      supportedSearchTypes: ['so_hieu', 'combo']
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } }
+  );
 }
