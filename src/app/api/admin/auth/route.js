@@ -3,7 +3,7 @@ import { query } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = '8h';
 
 export async function POST(request) {
@@ -89,22 +89,6 @@ export async function POST(request) {
     
     if (!isValidPassword) {
       console.log('❌ Password verification failed');
-      
-      // DEBUG: Test với các password khác
-      console.log('🔍 Testing other passwords:');
-      const testPasswords = ['password', 'admin123', 'admin'];
-      for (const testPass of testPasswords) {
-        const testResult = await bcrypt.compare(testPass, admin.password_hash);
-        console.log(`   "${testPass}": ${testResult ? '✅' : '❌'}`);
-      }
-      
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Tên đăng nhập hoặc mật khẩu không đúng' 
-        }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
     }
 
     // Update last login
