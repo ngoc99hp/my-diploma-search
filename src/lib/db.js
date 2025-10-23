@@ -277,22 +277,47 @@ export async function searchDiplomaCombo(maNguoiHoc, hoVaTen = null, ngaySinh = 
 
 /**
  * Log tra cứu vào database
+ * FIXED: Thêm diploma_number để hiển thị trong admin panel
  */
-export async function logSearch(diplomaNumber, ipAddress, userAgent, found, responseTimeMs, captchaScore = null, captchaStatus = null, errorMessage = null) {
+export async function logSearch(
+  diplomaNumber,      // Số hiệu văn bằng (plaintext)
+  ipAddress, 
+  userAgent, 
+  found, 
+  responseTimeMs, 
+  captchaScore = null, 
+  captchaStatus = null, 
+  errorMessage = null
+) {
   if (process.env.ENABLE_SEARCH_LOGGING !== 'true') {
     return;
   }
 
   try {
-    // Hash search value để bảo mật
+    // Hash search value để bảo mật (vẫn giữ cho audit)
     const crypto = await import('crypto');
-    const searchHash = crypto.createHash('sha256').update(diplomaNumber).digest('hex');
+    const searchHash = crypto.createHash('sha256')
+      .update(diplomaNumber || 'unknown')
+      .digest('hex');
 
+    // ✅ INSERT với CẢ diploma_number VÀ search_value_hash
     await query(
       `INSERT INTO search_logs 
-        (ip_address, user_agent, search_type, search_value_hash, found, response_time_ms, captcha_score, captcha_status, error_message)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [ipAddress, userAgent, 'so_hieu', searchHash, found, responseTimeMs, captchaScore, captchaStatus, errorMessage]
+        (ip_address, user_agent, search_type, diploma_number, search_value_hash, 
+         found, response_time_ms, captcha_score, captcha_status, error_message)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        ipAddress, 
+        userAgent, 
+        'so_hieu',
+        diplomaNumber,    // ✅ THÊM: Lưu plaintext để hiển thị
+        searchHash,       // Hash để bảo mật
+        found, 
+        responseTimeMs, 
+        captchaScore, 
+        captchaStatus, 
+        errorMessage
+      ]
     );
   } catch (error) {
     console.error('Failed to log search:', error);
