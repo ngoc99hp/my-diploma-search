@@ -1,375 +1,410 @@
-# 🎓 HỆ THỐNG TRA CỨU VĂN BẰNG
+# 🎓 Hệ thống Tra cứu Văn bằng Số
 
-**Trường Đại học Quản lý và Công nghệ Hải Phòng**
-
-[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-13+-blue)](https://www.postgresql.org/)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+**Phiên bản:** 2.0  
+**Trường:** Đại học Quản lý và Công nghệ Hải Phòng  
+**Chuẩn:** Phụ lục 1.2 - Bộ Giáo dục và Đào tạo
 
 ---
 
-## 📖 GIỚI THIỆU
+## 📋 Tổng quan
 
-Hệ thống tra cứu và xác thực văn bằng tốt nghiệp trực tuyến, cho phép công dân, doanh nghiệp, cơ quan nhà nước và nội bộ trường kiểm tra tính hợp lệ của văn bằng tốt nghiệp được cấp bởi Trường Đại học Quản lý và Công nghệ Hải Phòng.
+Hệ thống tra cứu và quản lý văn bằng số trực tuyến, tuân thủ đầy đủ **Thông tư 27/2019/TT-BGDĐT** và **Phụ lục 1.2** về định dạng văn bằng số.
 
 ### ✨ Tính năng chính
 
-- ✅ Tra cứu văn bằng bằng số hiệu bằng tốt nghiệp
-- ✅ Hiển thị thông tin chi tiết: Tên trường, ngành đào tạo, chuyên ngành, số vào sổ, ngày cấp
-- ✅ Xem thông tin sinh viên: Mã SV, họ tên, hệ đào tạo, năm tốt nghiệp
-- ✅ Hệ thống hoàn toàn công khai, không cần đăng nhập
-- ✅ Rate limiting để chống spam/DDoS
-- ✅ Logging tra cứu để phân tích
-- ✅ Responsive design, tương thích mobile
+#### 🔍 Tra cứu công khai
+- ✅ Tra cứu theo **Số hiệu văn bằng**
+- ✅ Tra cứu theo **Mã sinh viên + Họ tên/Ngày sinh**
+- ✅ Xác thực bằng Google reCAPTCHA v3
+- ✅ Rate limiting (30 requests/giờ)
+- ✅ Hiển thị đầy đủ thông tin văn bằng
+- ✅ Responsive design (mobile, tablet, desktop)
+
+#### 🔐 Quản trị Admin
+- ✅ Đăng nhập an toàn (JWT + bcrypt)
+- ✅ Quản lý văn bằng (CRUD)
+- ✅ Import hàng loạt từ Excel
+- ✅ Export template Excel
+- ✅ Nhật ký tra cứu với thống kê
+- ✅ Phân quyền (Admin, Editor, Viewer)
+- ✅ Audit logs cho mọi thao tác
+
+#### 📊 Dữ liệu
+- ✅ **44 trường** theo Phụ lục 1.2 BGDĐT
+- ✅ **33 trường bắt buộc** tuân thủ đầy đủ
+- ✅ **11 trường phụ lục** bằng tốt nghiệp
+- ✅ Mã định danh tự động: `HPU-2024-CNH-000001`
+- ✅ Soft delete (không xóa vĩnh viễn)
 
 ---
 
-## 🚀 CÔNG NGHỆ SỬ DỤNG
+## 🏗️ Kiến trúc hệ thống
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Next.js 15 App                      │
+│                   (App Router + RSC)                    │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────────┐         ┌─────────────────┐      │
+│  │  Public Pages   │         │  Admin Panel    │      │
+│  ├─────────────────┤         ├─────────────────┤      │
+│  │ • Search Form   │         │ • Login         │      │
+│  │ • Result View   │         │ • Dashboard     │      │
+│  │ • reCAPTCHA     │         │ • CRUD Diplomas │      │
+│  └─────────────────┘         │ • Import Excel  │      │
+│                              │ • View Logs     │      │
+│                              └─────────────────┘      │
+├─────────────────────────────────────────────────────────┤
+│                     API Routes                          │
+│  • /api/search              - Tra cứu công khai        │
+│  • /api/admin/auth          - Xác thực admin           │
+│  • /api/admin/diplomas      - CRUD văn bằng            │
+│  • /api/admin/import        - Import/Export Excel      │
+│  • /api/admin/logs          - Nhật ký tra cứu          │
+├─────────────────────────────────────────────────────────┤
+│                    Database Layer                       │
+│  • PostgreSQL 14+                                       │
+│  • Connection Pooling (pg)                              │
+│  • Transactions & Error Handling                        │
+├─────────────────────────────────────────────────────────┤
+│                   Database Schema                       │
+│  • diplomas           - Văn bằng (44 fields)           │
+│  • search_logs        - Nhật ký tra cứu                │
+│  • admin_users        - Tài khoản quản trị             │
+│  • admin_logs         - Nhật ký thao tác admin         │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🛠️ Tech Stack
 
 ### Frontend
-- **Next.js 14** - React framework với App Router
-- **React 18** - UI library
-- **Tailwind CSS** - Styling
-- **React IMask** - Input masking
+- **Framework:** Next.js 15 (App Router)
+- **UI:** React 19, Tailwind CSS
+- **Notifications:** Sonner (toast)
+- **Security:** Google reCAPTCHA v3
+- **Icons:** Lucide React
 
 ### Backend
-- **Next.js API Routes** - REST API
-- **Node.js** - Runtime environment
+- **Runtime:** Node.js 18+
+- **Database:** PostgreSQL 14+
+- **ORM:** pg (node-postgres)
+- **Auth:** JWT + bcryptjs
+- **Excel:** xlsx (SheetJS)
 
-### Database
-- **PostgreSQL 13+** - Relational database
-- **pg** - PostgreSQL client for Node.js
-
-### Deployment
-- **Vercel** - Hosting platform
-- **DB 230** - Production database server
-
----
-
-## 📋 YÊU CẦU HỆ THỐNG
-
-- Node.js >= 18.17.0 (Khuyến nghị: 20.x LTS)
-- PostgreSQL >= 13.0 (Khuyến nghị: 15.x hoặc 16.x)
-- npm/yarn/pnpm
+### DevOps
+- **Version Control:** Git
+- **Environment:** .env.local
+- **Package Manager:** npm/yarn/pnpm
 
 ---
 
-## 🛠️ CÀI ĐẶT
-
-### 1. Clone repository
-
-```bash
-git clone <repository-url>
-cd diploma-verification-system
-```
-
-### 2. Cài đặt dependencies
-
-```bash
-npm install
-```
-
-### 3. Cấu hình database
-
-```bash
-# Tạo database PostgreSQL
-createdb diploma_system
-
-# Copy file cấu hình
-cp .env.example .env.local
-
-# Chỉnh sửa .env.local với thông tin database của bạn
-```
-
-### 4. Chạy migration
-
-```bash
-npm run db:migrate
-```
-
-### 5. Test kết nối
-
-```bash
-npm run db:test
-```
-
-### 6. Chạy development server
-
-```bash
-npm run dev
-```
-
-Mở trình duyệt: http://localhost:3000
-
-📚 **Xem hướng dẫn chi tiết tại [SETUP.md](SETUP.md)**
-
----
-
-## 📊 DATABASE SCHEMA
-
-### Bảng chính
-
-#### `diplomas` - Thông tin văn bằng
-- `diploma_number` (VARCHAR) - Số hiệu bằng (unique)
-- `registry_number` (VARCHAR) - Số vào sổ
-- `issue_date` (DATE) - Ngày cấp
-- `school_name` (VARCHAR) - Tên trường
-- `major` (VARCHAR) - Ngành đào tạo
-- `specialization` (VARCHAR) - Chuyên ngành
-- `student_code` (VARCHAR) - Mã sinh viên
-- `full_name` (VARCHAR) - Họ và tên
-- `training_system` (VARCHAR) - Hệ đào tạo
-- `graduation_year` (INTEGER) - Năm tốt nghiệp
-
-#### `search_logs` - Nhật ký tra cứu
-- `diploma_number` (VARCHAR) - Số hiệu được tra cứu
-- `ip_address` (VARCHAR) - Địa chỉ IP
-- `found` (BOOLEAN) - Tìm thấy hay không
-- `search_time` (TIMESTAMP) - Thời gian tra cứu
-
-#### `admin_users` - Quản trị viên
-- `username` (VARCHAR) - Tên đăng nhập
-- `password_hash` (VARCHAR) - Mật khẩu đã hash
-- `role` (VARCHAR) - Vai trò (admin/editor/viewer)
-
-#### `admin_logs` - Nhật ký admin
-- `action` (VARCHAR) - Hành động (INSERT/UPDATE/DELETE)
-- `table_name` (VARCHAR) - Tên bảng
-- `old_data` (JSONB) - Dữ liệu cũ
-- `new_data` (JSONB) - Dữ liệu mới
-
----
-
-## 🔌 API ENDPOINTS
-
-### POST /api/search
-Tra cứu văn bằng theo số hiệu
-
-**Request:**
-```json
-{
-  "diplomaNumber": "123456"
-}
-```
-
-**Response (Success):**
-```json
-{
-  "success": true,
-  "data": {
-    "diploma_number": "123456",
-    "registry_number": "SV2023-7890",
-    "issue_date": "2023-06-15",
-    "school_name": "Trường Đại học Quản lý và Công nghệ Hải Phòng",
-    "major": "Công nghệ Thông tin",
-    "specialization": "Kỹ thuật Phần mềm",
-    "student_info": {
-      "student_code": "2019600001",
-      "full_name": "Nguyễn Văn A",
-      "training_system": "Đại học chính quy",
-      "graduation_year": 2023
-    }
-  }
-}
-```
-
-**Response (Not Found):**
-```json
-{
-  "success": false,
-  "message": "Không có số hiệu bằng Tốt nghiệp này!"
-}
-```
-
-**Response (Rate Limited):**
-```json
-{
-  "success": false,
-  "message": "Bạn đã vượt quá số lần tra cứu cho phép. Vui lòng thử lại sau.",
-  "rateLimitExceeded": true
-}
-```
-
-### GET /api/search
-Health check endpoint
-
----
-
-## 🎨 GIAO DIỆN
-
-### Desktop
-![Desktop View](screenshots/desktop.png)
-
-### Mobile
-![Mobile View](screenshots/mobile.png)
-
----
-
-## 🔐 BẢO MẬT
-
-- ✅ Rate limiting: 100 requests/hour per IP
-- ✅ SQL injection prevention với parameterized queries
-- ✅ Input validation và sanitization
-- ✅ HTTPS trong production
-- ✅ Logging tất cả tra cứu để audit
-- ✅ Tuân thủ Luật bảo vệ dữ liệu cá nhân 91/2025/QH15
-
----
-
-## 📈 HIỆU NĂNG
-
-- ⚡ Response time: < 200ms (trung bình)
-- 💾 Database query optimization với indexes
-- 🗄️ Connection pooling
-- 📦 API caching: 5 minutes
-- 🚀 Deploy trên Vercel Edge Network
-
----
-
-## 🧪 TESTING
-
-### Test kết nối database
-```bash
-npm run db:test
-```
-
-### Test API
-```bash
-# Test tra cứu thành công
-curl -X POST http://localhost:3000/api/search \
-  -H "Content-Type: application/json" \
-  -d '{"diplomaNumber":"123456"}'
-
-# Test tra cứu không tìm thấy
-curl -X POST http://localhost:3000/api/search \
-  -H "Content-Type: application/json" \
-  -d '{"diplomaNumber":"INVALID"}'
-```
-
----
-
-## 📦 DEPLOYMENT
-
-### Deploy lên Vercel
-
-1. Push code lên GitHub
-2. Import project vào Vercel
-3. Cấu hình Environment Variables trong Vercel Dashboard:
-   ```
-   DATABASE_URL=postgresql://user:pass@host:5432/dbname
-   JWT_SECRET=your-secret
-   RATE_LIMIT_MAX_REQUESTS=100
-   ENABLE_SEARCH_LOGGING=true
-   ```
-4. Deploy
-
-### Kết nối DB 230
-
-Trong production, cấu hình `DATABASE_URL` trỏ đến server DB 230:
-
-```env
-DATABASE_URL=postgresql://username:password@192.168.x.230:5432/diploma_system
-```
-
----
-
-## 🗺️ ROADMAP
-
-### ✅ Phase 1 - Hoàn thành (Hiện tại)
-- [x] Form tra cứu cơ bản
-- [x] Database schema design
-- [x] API tra cứu với PostgreSQL
-- [x] Rate limiting
-- [x] Search logging
-- [x] Responsive UI
-
-### 🚧 Phase 2 - Đang phát triển
-- [ ] Tích hợp Captcha (Cloudflare Turnstile)
-- [ ] Admin Panel
-  - [ ] Dashboard thống kê
-  - [ ] Upload Excel import data
-  - [ ] CRUD văn bằng
-  - [ ] Xem logs
-- [ ] Backup tự động
-- [ ] Email notifications
-
-### 🔮 Phase 3 - Tương lai
-- [ ] Đa ngôn ngữ (Tiếng Việt + English)
-- [ ] Export kết quả PDF
-- [ ] QR Code verification
-- [ ] Advanced analytics
-- [ ] Mobile app (React Native)
-- [ ] API cho bên thứ 3
-
----
-
-## 📂 CẤU TRÚC DỰ ÁN
+## 📦 Cấu trúc thư mục
 
 ```
-diploma-verification-system/
+diploma-system/
+├── database/
+│   ├── schema.sql                 # Schema v2.0 (44 fields)
+│   └── seed-data.sql              # Dữ liệu mẫu (5 văn bằng)
+│
+├── scripts/
+│   ├── migrate.js                 # Chạy migration
+│   ├── test-connection.js         # Test database
+│   └── fix-admin-password.js      # Fix mật khẩu admin
+│
 ├── src/
 │   ├── app/
-│   │   ├── api/
-│   │   │   └── search/
-│   │   │       └── route.js      # API tra cứu
-│   │   ├── layout.js             # Layout chính
-│   │   ├── page.js               # Trang tra cứu
-│   │   └── globals.css           # CSS global
+│   │   ├── page.js                # Trang tra cứu công khai
+│   │   ├── layout.js              # Root layout
+│   │   ├── globals.css            # Global styles
+│   │   │
+│   │   ├── admin/
+│   │   │   ├── login/
+│   │   │   │   └── page.js        # Đăng nhập admin
+│   │   │   │
+│   │   │   └── dashboard/
+│   │   │       ├── page.js        # Dashboard chính
+│   │   │       └── components/
+│   │   │           ├── DiplomaModal.js      # Form thêm/sửa (44 fields)
+│   │   │           ├── DiplomasTable.js     # Bảng danh sách
+│   │   │           ├── ImportModal.js       # Import Excel
+│   │   │           ├── LogsTable.js         # Nhật ký tra cứu
+│   │   │           ├── Pagination.js        # Phân trang
+│   │   │           └── Sidebar.js           # Menu sidebar
+│   │   │
+│   │   └── api/
+│   │       ├── search/
+│   │       │   └── route.js       # API tra cứu công khai
+│   │       │
+│   │       └── admin/
+│   │           ├── auth/
+│   │           │   └── route.js   # Login/Logout
+│   │           ├── diplomas/
+│   │           │   └── route.js   # CRUD văn bằng
+│   │           ├── import/
+│   │           │   └── route.js   # Import/Export Excel
+│   │           └── logs/
+│   │               └── route.js   # API logs
+│   │
 │   └── lib/
-│       └── db.js                 # Database connection & helpers
-├── database/
-│   └── schema.sql                # PostgreSQL schema
-├── scripts/
-│   ├── migrate.js                # Database migration
-│   └── test-connection.js        # Test DB connection
-├── public/                       # Static files
-├── .env.example                  # Environment template
-├── .env.local                    # Local env (gitignored)
+│       └── db.js                  # Database functions
+│
+├── .env.local                     # Environment variables
+├── .gitignore
 ├── package.json
-├── next.config.js
-├── tailwind.config.js
-├── SETUP.md                      # Hướng dẫn cài đặt chi tiết
-└── README.md                     # File này
+├── README.md                      # File này
+├── SETUP.md                       # Hướng dẫn cài đặt
+└── next.config.js
 ```
 
 ---
 
-## 🤝 ĐÓNG GÓP
+## 🎯 Tính năng chi tiết
 
-Dự án này được phát triển và duy trì bởi **Trung tâm Công nghệ Thông tin - Trường ĐH HPU**.
+### 1. Tra cứu Văn bằng (Public)
 
-### Liên hệ
+#### Tra cứu theo Số hiệu
+```
+Input:  Số hiệu VB (VD: 001/ĐHCN-2024)
+Output: Thông tin đầy đủ văn bằng + Mã định danh
+```
+
+#### Tra cứu theo Mã SV
+```
+Input:  Mã SV + (Họ tên HOẶC Ngày sinh)
+Output: Thông tin đầy đủ văn bằng + Mã định danh
+```
+
+#### Thông tin hiển thị
+- ✅ Mã định danh: `HPU-2024-CNH-000001`
+- ✅ Thông tin cá nhân: Họ tên, ngày sinh, nơi sinh, giới tính
+- ✅ Thông tin văn bằng: Số hiệu, ngành, chuyên ngành, xếp loại
+- ✅ Thông tin đào tạo: Hình thức, thời gian, trình độ
+- ✅ Thông tin cấp bằng: Ngày cấp, nơi cấp, đơn vị cấp
+
+### 2. Quản trị Admin
+
+#### Đăng nhập
+- 🔐 JWT Token (8 giờ)
+- 🔐 bcrypt password hashing
+- 🔐 Cookie HttpOnly + SameSite
+
+#### Dashboard
+- 📊 Thống kê tổng quan
+- 📊 Danh sách văn bằng (phân trang)
+- 🔍 Tìm kiếm nhanh
+- ⚡ Real-time updates
+
+#### Quản lý Văn bằng
+- ➕ **Thêm mới:** Form 3 tabs với 44 fields
+- ✏️ **Chỉnh sửa:** Cập nhật mọi thông tin
+- 🗑️ **Xóa:** Soft delete (is_active = false)
+- 📥 **Import:** Excel với 29 cột
+- 📤 **Export:** Download template mẫu
+
+#### Import Excel
+```
+Template: 29 cột quan trọng
+- Tự động sinh mã định danh
+- Validate 27 trường bắt buộc
+- Báo lỗi chi tiết theo từng dòng
+- Skip các bản ghi lỗi, import phần hợp lệ
+```
+
+#### Nhật ký Tra cứu
+- 📈 Thống kê: Tổng/Thành công/Thất bại/Tỷ lệ
+- 📊 Top văn bằng được tìm nhiều nhất
+- 📅 Thống kê theo ngày
+- 🔎 Filter theo khoảng thời gian
+
+---
+
+## 🔒 Bảo mật
+
+### Authentication
+- ✅ JWT với secret key
+- ✅ Password hashing (bcrypt, cost=10)
+- ✅ HttpOnly cookies
+- ✅ Session timeout (8h)
+
+### Authorization
+- ✅ Role-based access (admin, editor, viewer)
+- ✅ Middleware protection cho admin routes
+- ✅ Token verification mọi request
+
+### Rate Limiting
+- ✅ 30 requests/giờ cho search
+- ✅ IP-based tracking
+- ✅ Configurable limits
+
+### Data Protection
+- ✅ CCCD được hash trong logs
+- ✅ SQL injection prevention (parameterized queries)
+- ✅ XSS protection (React escaping)
+- ✅ CSRF protection (SameSite cookies)
+
+### Privacy
+- ❌ KHÔNG hiển thị CCCD sinh viên trong tra cứu công khai
+- ✅ Chỉ admin mới xem được CCCD
+- ✅ Audit logs cho mọi thao tác nhạy cảm
+
+---
+
+## 📊 Database Schema v2.0
+
+### Table: diplomas (44 fields)
+
+#### A. Thông tin chung (33 fields bắt buộc)
+```sql
+- Metadata: phien_ban, thong_tu, ma_dinh_danh_vbcc, ten_vbcc
+- Ngành: nganh_dao_tao, ma_nganh_dao_tao
+- Định danh: so_hieu_vbcc, so_ddcn, ma_nguoi_hoc
+- Cá nhân: ho_va_ten, ngay_sinh, noi_sinh, gioi_tinh, dan_toc, quoc_tich
+- Trường: ten_truong, ma_co_so_dao_tao
+- Tốt nghiệp: nam_tot_nghiep, so_quyet_dinh_*, ngay_quyet_dinh_*
+- Văn bằng: so_vao_so, xep_loai
+- Cấp bằng: don_vi_cap_bang, ma_don_vi_cap_bang
+- Người ký: ho_ten_nguoi_ky_vbcc, so_ddcn_nguoi_ky_vbcc, chuc_danh_*
+- Thời gian: dia_danh_cap_vbcc, ngay_tao_vbcc, ngay_cap_vbcc
+```
+
+#### B. Phụ lục bằng (11 fields)
+```sql
+- chuyen_nganh_dao_tao, ngay_nhap_hoc
+- ngon_ngu_dao_tao, thoi_gian_dao_tao, tong_so_tin_chi
+- trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia
+- hinh_thuc_dao_tao, ghi_chu
+- attachment_name, attachment_content_base64
+```
+
+### Mã định danh tự động
+```
+Format: HPU-{NĂM}-{LOẠI}-{SEQUENCE}
+
+Loại:
+- CNH: Cử nhân
+- KSU: Kỹ sư  
+- THS: Thạc sĩ
+- TSI: Tiến sĩ
+
+Ví dụ: HPU-2024-CNH-000001
+```
+
+---
+
+## 📈 Performance
+
+### Database
+- ✅ Connection pooling (2-10 connections)
+- ✅ Indexes trên các cột tìm kiếm
+- ✅ Query optimization
+- ✅ Transaction support
+
+### Caching
+- ✅ Static pages (Next.js ISR)
+- ✅ API response caching (5 phút)
+- ✅ CDN ready
+
+### Monitoring
+- ✅ Query execution time logging
+- ✅ Error tracking
+- ✅ Response time metrics
+
+---
+
+## 🧪 Testing
+
+### Unit Tests
+```bash
+npm run test:db          # Test database connection
+node scripts/migrate.js  # Test schema migration
+```
+
+### Manual Testing Checklist
+
+#### Tra cứu công khai
+- [ ] Tra cứu theo số hiệu - Tìm thấy
+- [ ] Tra cứu theo số hiệu - Không tìm thấy
+- [ ] Tra cứu theo mã SV + họ tên
+- [ ] Tra cứu theo mã SV + ngày sinh
+- [ ] Tra cứu thiếu thông tin
+- [ ] CAPTCHA verification
+- [ ] Rate limiting
+
+#### Admin panel
+- [ ] Đăng nhập thành công
+- [ ] Đăng nhập sai mật khẩu
+- [ ] Thêm văn bằng mới
+- [ ] Chỉnh sửa văn bằng
+- [ ] Xóa văn bằng
+- [ ] Import Excel hợp lệ
+- [ ] Import Excel có lỗi
+- [ ] Download template
+- [ ] Xem nhật ký tra cứu
+- [ ] Đăng xuất
+
+---
+
+## 🚀 Production Checklist
+
+### Trước khi deploy
+
+- [ ] Đổi `JWT_SECRET` trong `.env`
+- [ ] Cấu hình SSL database
+- [ ] Setup Google reCAPTCHA keys (production)
+- [ ] Review rate limits
+- [ ] Enable logging (`ENABLE_SEARCH_LOGGING=true`)
+- [ ] Backup database
+- [ ] Test full workflow
+- [ ] Security audit
+- [ ] Performance testing
+
+### Sau khi deploy
+
+- [ ] Kiểm tra kết nối database
+- [ ] Test tra cứu công khai
+- [ ] Test admin login
+- [ ] Kiểm tra logs
+- [ ] Monitor errors
+- [ ] Setup automated backups
+- [ ] Configure monitoring/alerting
+
+---
+
+## 📞 Liên hệ & Hỗ trợ
+
+**Phòng Đào tạo - Trường Đại học HPU**
 - 📧 Email: daotao@hpu.edu.vn
 - 🌐 Website: https://hpu.edu.vn
-- 📞 Hotline: (0225) 3.xxx.xxx
+- 📞 Hotline: 0225.xxx.xxxx
 
 ---
 
-## 📄 LICENSE
+## 📄 License
 
-MIT License - Xem file [LICENSE](LICENSE) để biết thêm chi tiết
-
----
-
-## 🙏 CREDITS
-
-- **Next.js Team** - Framework
-- **Vercel** - Hosting platform  
-- **PostgreSQL Team** - Database
-- **Tailwind CSS** - UI framework
+Copyright © 2025 Trường Đại học Quản lý và Công nghệ Hải Phòng.  
+All rights reserved.
 
 ---
 
-## 📝 CHANGELOG
+## 🎉 Changelog
 
-### Version 1.0.0 (2025-10-03)
-- ✨ Phát hành phiên bản đầu tiên
-- ✅ Chức năng tra cứu văn bằng cơ bản
-- ✅ Database PostgreSQL
-- ✅ Rate limiting
-- ✅ Search logging
-- ✅ Responsive UI
+### Version 2.0 (2025-01-XX)
+- ✅ Cập nhật schema lên 44 fields (Phụ lục 1.2)
+- ✅ Thêm mã định danh tự động
+- ✅ Hỗ trợ tra cứu combo (Mã SV + Họ tên/Ngày sinh)
+- ✅ Import Excel với 29 cột
+- ✅ Nhật ký tra cứu với thống kê chi tiết
+- ✅ Cải thiện UI/UX admin panel
+- ✅ Tối ưu performance & security
+
+### Version 1.0 (Initial)
+- ✅ Tra cứu cơ bản theo số hiệu
+- ✅ Admin CRUD đơn giản
+- ✅ Schema 11 fields
 
 ---
 
-**Developed with ❤️ by HPU IT Team**
+**Built with ❤️ by HPU Development Team**
