@@ -1,4 +1,4 @@
-// src/app/api/admin/auth/route.js
+// src/app/api/admin/auth/route.js - With Debug Logging
 import { query } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -7,8 +7,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 const JWT_EXPIRES_IN = '8h';
 
 export async function POST(request) {
+  console.log('🔐 Login attempt started');
+  
   try {
     const { username, password, action } = await request.json();
+    console.log('📝 Received data:', { username, action, hasPassword: !!password });
 
     // Logout
     if (action === 'logout') {
@@ -26,6 +29,7 @@ export async function POST(request) {
 
     // Login validation
     if (!username || !password) {
+      console.log('❌ Missing username or password');
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -36,14 +40,22 @@ export async function POST(request) {
     }
 
     // Find admin user
+    console.log('🔍 Searching for user:', username);
     const result = await query(
       `SELECT id, username, password_hash, full_name, email, role, is_active
        FROM admin_users 
-       WHERE username = $1 AND is_active = TRUE`,
+       WHERE username = $1`,
       [username]
     );
 
+    console.log('📊 Query result:', {
+      rowCount: result.rows.length,
+      found: result.rows.length > 0,
+      isActive: result.rows[0]?.is_active
+    });
+
     if (result.rows.length === 0) {
+      console.log('❌ User not found in database');
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -54,11 +66,38 @@ export async function POST(request) {
     }
 
     const admin = result.rows[0];
+    
+    // Check if user is active
+    if (!admin.is_active) {
+      console.log('❌ User is inactive');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Tài khoản đã bị vô hiệu hóa' 
+        }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
 
+    console.log('🔐 Verifying password...');
+    console.log('   Input password length:', password.length);
+    console.log('   Hash from DB:', admin.password_hash.substring(0, 29) + '...');
+    
     // Verify password
     const isValidPassword = await bcrypt.compare(password, admin.password_hash);
+    console.log('   Verification result:', isValidPassword ? '✅ VALID' : '❌ INVALID');
     
     if (!isValidPassword) {
+      console.log('❌ Password verification failed');
+      
+      // DEBUG: Test với các password khác
+      console.log('🔍 Testing other passwords:');
+      const testPasswords = ['password', 'admin123', 'admin'];
+      for (const testPass of testPasswords) {
+        const testResult = await bcrypt.compare(testPass, admin.password_hash);
+        console.log(`   "${testPass}": ${testResult ? '✅' : '❌'}`);
+      }
+      
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -69,12 +108,14 @@ export async function POST(request) {
     }
 
     // Update last login
+    console.log('✅ Password valid, updating last login...');
     await query(
       `UPDATE admin_users SET last_login = NOW() WHERE id = $1`,
       [admin.id]
     );
 
     // Create JWT token
+    console.log('🎫 Creating JWT token...');
     const token = jwt.sign(
       { 
         id: admin.id, 
@@ -85,6 +126,8 @@ export async function POST(request) {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
+    console.log('✅ Login successful for user:', admin.username);
+    
     return new Response(
       JSON.stringify({ 
         success: true, 
@@ -107,11 +150,15 @@ export async function POST(request) {
     );
 
   } catch (error) {
-    console.error('Admin auth error:', error);
+    console.error('❌ Admin auth error:', error);
+    console.error('   Message:', error.message);
+    console.error('   Stack:', error.stack);
+    
     return new Response(
       JSON.stringify({ 
         success: false, 
-        message: 'Đã có lỗi xảy ra, vui lòng thử lại' 
+        message: 'Đã có lỗi xảy ra, vui lòng thử lại',
+        debug: process.env.NODE_ENV === 'development' ? error.message : undefined
       }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
