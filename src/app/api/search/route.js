@@ -1,6 +1,14 @@
-// src/app/api/search/route.js - Updated for Schema v2
-import { searchDiplomaByNumber, searchDiplomaCombo, logSearch, checkRateLimit } from '@/lib/db';
+// src/app/api/search/route.js - WITH CACHE OPTIMIZATION
 
+// ============================================
+// IMPORTS
+// ============================================
+import { searchDiplomaByNumber, searchDiplomaCombo, logSearch, checkRateLimit } from '@/lib/db';
+import { searchCache } from '@/lib/cache'; // ✅ NEW: Import cache
+
+// ============================================
+// POST - Search Diploma
+// ============================================
 export async function POST(request) {
   const startTime = Date.now();
 
@@ -13,6 +21,10 @@ export async function POST(request) {
                      'unknown';
     const userAgent = request.headers.get('user-agent') || 'unknown';
 
+    // ============================================
+    // VALIDATION
+    // ============================================
+    
     // Validate search type
     if (!searchType || !['so_hieu', 'combo'].includes(searchType)) {
       return new Response(
@@ -47,7 +59,6 @@ export async function POST(request) {
         );
       }
 
-      // Phải có ít nhất 1 trong 2: họ tên hoặc ngày sinh
       if ((!hoVaTen || !hoVaTen.trim()) && (!ngaySinh || !ngaySinh.trim())) {
         return new Response(
           JSON.stringify({ 
@@ -59,7 +70,65 @@ export async function POST(request) {
       }
     }
 
-    // Verify reCAPTCHA
+    // ============================================
+    // ✅ NEW: CHECK CACHE FIRST
+    // ============================================
+    let cacheKey;
+    if (searchType === 'so_hieu') {
+      cacheKey = searchCache.generateKey('diploma', 'so_hieu', soHieuVBCC?.trim());
+    } else {
+      cacheKey = searchCache.generateKey(
+        'diploma', 
+        'combo', 
+        maNguoiHoc?.trim(), 
+        hoVaTen?.trim() || '', 
+        ngaySinh?.trim() || ''
+      );
+    }
+
+    // Try to get from cache
+    const cachedResult = searchCache.get(cacheKey);
+    
+    if (cachedResult) {
+      // ✅ CACHE HIT - Return immediately
+      console.log('✅ Cache HIT:', cacheKey);
+      
+      const responseTime = Date.now() - startTime;
+      
+      // Still log the search for statistics
+      await logSearch(
+        searchType === 'so_hieu' ? soHieuVBCC?.trim() : maNguoiHoc?.trim(),
+        ipAddress,
+        userAgent,
+        true,
+        responseTime,
+        null, // No CAPTCHA check for cached results
+        'success',
+        null
+      );
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: cachedResult,
+        cached: true, // Debug flag
+        responseTime: `${responseTime}ms`
+      }), {
+        status: 200,
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Cache': 'HIT',
+          'X-Response-Time': `${responseTime}ms`,
+          'Cache-Control': 'public, max-age=300'
+        },
+      });
+    }
+
+    // ❌ CACHE MISS - Continue with normal flow
+    console.log('❌ Cache MISS:', cacheKey);
+
+    // ============================================
+    // VERIFY RECAPTCHA
+    // ============================================
     if (!recaptchaToken) {
       await logSearch('unknown', ipAddress, userAgent, false, Date.now() - startTime, null, 'failed', 'Missing CAPTCHA token');
       return new Response(
@@ -104,7 +173,9 @@ export async function POST(request) {
       );
     }
 
-    // Kiểm tra rate limit
+    // ============================================
+    // CHECK RATE LIMIT
+    // ============================================
     try {
       const rateLimitStatus = await checkRateLimit(ipAddress);
       
@@ -142,7 +213,9 @@ export async function POST(request) {
       console.error('Rate limit check failed:', rateLimitError);
     }
 
-    // Tìm kiếm trong database
+    // ============================================
+    // SEARCH DATABASE
+    // ============================================
     let result = null;
     let searchValue = '';
 
@@ -171,51 +244,63 @@ export async function POST(request) {
       'success'
     );
 
-    // Nếu tìm thấy
+    // ============================================
+    // FOUND - Return and Cache
+    // ============================================
     if (result) {
       const responseData = {
-        success: true,
-        data: {
-          // Thông tin định danh
-          ma_dinh_danh_vbcc: result.ma_dinh_danh_vbcc,
-          so_hieu_vbcc: result.so_hieu_vbcc,
-          
-          // Thông tin sinh viên (ẩn CCCD)
-          ho_va_ten: result.ho_va_ten,
-          ngay_sinh: result.ngay_sinh,
-          noi_sinh: result.noi_sinh,
-          gioi_tinh: result.gioi_tinh,
-          ma_nguoi_hoc: result.ma_nguoi_hoc,
-          
-          // Thông tin văn bằng
-          nganh_dao_tao: result.nganh_dao_tao,
-          chuyen_nganh_dao_tao: result.chuyen_nganh_dao_tao,
-          xep_loai: result.xep_loai,
-          nam_tot_nghiep: result.nam_tot_nghiep,
-          
-          // Thông tin đào tạo
-          hinh_thuc_dao_tao: result.hinh_thuc_dao_tao,
-          thoi_gian_dao_tao: result.thoi_gian_dao_tao,
-          trinh_do_theo_khung_quoc_gia: result.trinh_do_theo_khung_quoc_gia,
-          bac_trinh_do_theo_khung_quoc_gia: result.bac_trinh_do_theo_khung_quoc_gia,
-          
-          // Thông tin cấp bằng
-          don_vi_cap_bang: result.don_vi_cap_bang,
-          ngay_cap_vbcc: result.ngay_cap_vbcc,
-          dia_danh_cap_vbcc: result.dia_danh_cap_vbcc
-        }
+        // Thông tin định danh
+        ma_dinh_danh_vbcc: result.ma_dinh_danh_vbcc,
+        so_hieu_vbcc: result.so_hieu_vbcc,
+        
+        // Thông tin sinh viên (ẩn CCCD)
+        ho_va_ten: result.ho_va_ten,
+        ngay_sinh: result.ngay_sinh,
+        noi_sinh: result.noi_sinh,
+        gioi_tinh: result.gioi_tinh,
+        ma_nguoi_hoc: result.ma_nguoi_hoc,
+        
+        // Thông tin văn bằng
+        nganh_dao_tao: result.nganh_dao_tao,
+        chuyen_nganh_dao_tao: result.chuyen_nganh_dao_tao,
+        xep_loai: result.xep_loai,
+        nam_tot_nghiep: result.nam_tot_nghiep,
+        
+        // Thông tin đào tạo
+        hinh_thuc_dao_tao: result.hinh_thuc_dao_tao,
+        thoi_gian_dao_tao: result.thoi_gian_dao_tao,
+        trinh_do_theo_khung_quoc_gia: result.trinh_do_theo_khung_quoc_gia,
+        bac_trinh_do_theo_khung_quoc_gia: result.bac_trinh_do_theo_khung_quoc_gia,
+        
+        // Thông tin cấp bằng
+        don_vi_cap_bang: result.don_vi_cap_bang,
+        ngay_cap_vbcc: result.ngay_cap_vbcc,
+        dia_danh_cap_vbcc: result.dia_danh_cap_vbcc
       };
 
-      return new Response(JSON.stringify(responseData), {
+      // ✅ SAVE TO CACHE
+      searchCache.set(cacheKey, responseData);
+      console.log('💾 Saved to cache:', cacheKey);
+
+      return new Response(JSON.stringify({
+        success: true,
+        data: responseData,
+        cached: false, // Debug flag
+        responseTime: `${responseTime}ms`
+      }), {
         status: 200,
         headers: { 
           'Content-Type': 'application/json',
+          'X-Cache': 'MISS',
+          'X-Response-Time': `${responseTime}ms`,
           'Cache-Control': 'public, max-age=300'
         },
       });
     }
 
-    // Nếu không tìm thấy
+    // ============================================
+    // NOT FOUND
+    // ============================================
     return new Response(
       JSON.stringify({ 
         success: false,
@@ -276,13 +361,17 @@ export async function POST(request) {
   }
 }
 
+// ============================================
+// GET - Health Check
+// ============================================
 export async function GET() {
   return new Response(
     JSON.stringify({ 
       status: 'ok',
       message: 'Diploma Search API v2.0 is running',
       timestamp: new Date().toISOString(),
-      supportedSearchTypes: ['so_hieu', 'combo']
+      supportedSearchTypes: ['so_hieu', 'combo'],
+      features: ['caching', 'rate-limiting', 'recaptcha']
     }),
     { status: 200, headers: { 'Content-Type': 'application/json' } }
   );

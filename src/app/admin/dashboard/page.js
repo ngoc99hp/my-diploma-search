@@ -10,6 +10,7 @@ import DiplomasTable from './components/DiplomasTable';
 import LogsTable from './components/LogsTable';
 import DiplomaModal from './components/DiplomaModal';
 import ImportModal from './components/ImportModal';
+import StatsPage from './components/StatsPage';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -361,6 +362,10 @@ export default function AdminDashboard() {
                 pagination={logsPagination}
                 onPageChange={(page) => setLogsPagination(prev => ({ ...prev, page }))}
               />
+            )}
+
+            {currentPage === 'stats' && (
+              <StatsPage />
             )}
           </div>
         </div>

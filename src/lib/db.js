@@ -34,27 +34,58 @@ function getPool() {
   if (!pool) {
     const sslConfig = getSSLConfig();
     
-    console.log('🔌 Initializing database pool:', {
-      env: process.env.NODE_ENV,
-      ssl: sslConfig ? 'enabled' : 'disabled',
-      hasUrl: !!process.env.DATABASE_URL
-    });
-
-    pool = new Pool({
+    // ✅ OPTIMIZED POOL CONFIGURATION
+    const poolConfig = {
       connectionString: process.env.DATABASE_URL,
-      min: parseInt(process.env.DB_POOL_MIN || '2'),
-      max: parseInt(process.env.DB_POOL_MAX || '10'),
-      connectionTimeoutMillis: 5000,
-      idleTimeoutMillis: 30000,
+      
+      // ✅ Tăng pool size cho production
+      min: process.env.NODE_ENV === 'production' 
+        ? parseInt(process.env.DB_POOL_MIN || '5')
+        : parseInt(process.env.DB_POOL_MIN || '2'),
+      
+      max: process.env.NODE_ENV === 'production'
+        ? parseInt(process.env.DB_POOL_MAX || '20')
+        : parseInt(process.env.DB_POOL_MAX || '10'),
+      
+      // ✅ Connection timeout - nhanh hơn
+      connectionTimeoutMillis: 3000, // 3s (từ 5s)
+      
+      // ✅ Idle timeout - giữ connection lâu hơn
+      idleTimeoutMillis: 60000, // 60s (từ 30s)
+      
+      // ✅ Statement timeout - tránh query chạy mãi
+      statement_timeout: 10000, // 10s max per query
+      
+      // ✅ Query timeout
+      query_timeout: 10000,
+      
+      // ✅ Application name for monitoring
+      application_name: 'diploma-search-system',
+      
       ssl: sslConfig
-    });
+    };
 
+    pool = new Pool(poolConfig);
+
+    // ✅ Enhanced error handling
     pool.on('error', (err) => {
-      console.error('❌ Unexpected database error:', err);
+      console.error('❌ Unexpected pool error:', err);
     });
 
-    pool.on('connect', () => {
-      console.log('✅ Database connected successfully');
+    pool.on('connect', (client) => {
+      console.log('✅ New client connected to pool');
+      
+      // Set session parameters for better performance
+      client.query('SET timezone = \'Asia/Ho_Chi_Minh\'');
+      client.query('SET statement_timeout = 10000'); // 10s
+    });
+
+    pool.on('acquire', (client) => {
+      console.log('📌 Client acquired from pool');
+    });
+
+    pool.on('remove', (client) => {
+      console.log('🗑️ Client removed from pool');
     });
   }
 
@@ -215,57 +246,77 @@ export async function searchDiplomaByNumber(soHieuVBCC) {
 
 /**
  * Tìm kiếm văn bằng theo Mã SV + Họ tên/Ngày sinh
+ * OPTIMIZED VERSION với prepared statement hints
  */
 export async function searchDiplomaCombo(maNguoiHoc, hoVaTen = null, ngaySinh = null) {
   try {
-    // Phải có ít nhất 1 trong 2: họ tên hoặc ngày sinh
     if (!hoVaTen && !ngaySinh) {
       throw new Error('Vui lòng nhập thêm Họ tên hoặc Ngày sinh');
     }
 
-    let queryText = `
-      SELECT 
-        ma_dinh_danh_vbcc,
-        so_hieu_vbcc,
-        ho_va_ten,
-        ngay_sinh,
-        noi_sinh,
-        gioi_tinh,
-        ma_nguoi_hoc,
-        nganh_dao_tao,
-        chuyen_nganh_dao_tao,
-        xep_loai,
-        nam_tot_nghiep,
-        hinh_thuc_dao_tao,
-        thoi_gian_dao_tao,
-        don_vi_cap_bang,
-        ngay_cap_vbcc,
-        dia_danh_cap_vbcc,
-        trinh_do_theo_khung_quoc_gia,
-        bac_trinh_do_theo_khung_quoc_gia
-      FROM diplomas
-      WHERE ma_nguoi_hoc = $1
-      AND is_active = TRUE
-    `;
+    // ✅ OPTIMIZATION: Chọn query tối ưu dựa trên input
+    let queryText;
+    let params;
 
-    const params = [maNguoiHoc];
-    let paramIndex = 2;
+    if (hoVaTen && ngaySinh) {
+      // Cả họ tên VÀ ngày sinh - query chính xác nhất
+      queryText = `
+        SELECT 
+          ma_dinh_danh_vbcc, so_hieu_vbcc, ho_va_ten, ngay_sinh, 
+          noi_sinh, gioi_tinh, ma_nguoi_hoc, nganh_dao_tao, 
+          chuyen_nganh_dao_tao, xep_loai, nam_tot_nghiep, 
+          hinh_thuc_dao_tao, thoi_gian_dao_tao, don_vi_cap_bang, 
+          ngay_cap_vbcc, dia_danh_cap_vbcc, 
+          trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia
+        FROM diplomas
+        WHERE ma_nguoi_hoc = $1
+          AND UPPER(ho_va_ten) = UPPER($2)
+          AND ngay_sinh = $3
+          AND is_active = TRUE
+        LIMIT 1
+      `;
+      params = [maNguoiHoc, hoVaTen, ngaySinh];
 
-    if (hoVaTen) {
-      queryText += ` AND UPPER(ho_va_ten) = UPPER($${paramIndex})`;
-      params.push(hoVaTen);
-      paramIndex++;
+    } else if (hoVaTen) {
+      // Chỉ có họ tên
+      queryText = `
+        SELECT 
+          ma_dinh_danh_vbcc, so_hieu_vbcc, ho_va_ten, ngay_sinh, 
+          noi_sinh, gioi_tinh, ma_nguoi_hoc, nganh_dao_tao, 
+          chuyen_nganh_dao_tao, xep_loai, nam_tot_nghiep, 
+          hinh_thuc_dao_tao, thoi_gian_dao_tao, don_vi_cap_bang, 
+          ngay_cap_vbcc, dia_danh_cap_vbcc, 
+          trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia
+        FROM diplomas
+        WHERE ma_nguoi_hoc = $1
+          AND UPPER(ho_va_ten) = UPPER($2)
+          AND is_active = TRUE
+        LIMIT 1
+      `;
+      params = [maNguoiHoc, hoVaTen];
+
+    } else {
+      // Chỉ có ngày sinh
+      queryText = `
+        SELECT 
+          ma_dinh_danh_vbcc, so_hieu_vbcc, ho_va_ten, ngay_sinh, 
+          noi_sinh, gioi_tinh, ma_nguoi_hoc, nganh_dao_tao, 
+          chuyen_nganh_dao_tao, xep_loai, nam_tot_nghiep, 
+          hinh_thuc_dao_tao, thoi_gian_dao_tao, don_vi_cap_bang, 
+          ngay_cap_vbcc, dia_danh_cap_vbcc, 
+          trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia
+        FROM diplomas
+        WHERE ma_nguoi_hoc = $1
+          AND ngay_sinh = $2
+          AND is_active = TRUE
+        LIMIT 1
+      `;
+      params = [maNguoiHoc, ngaySinh];
     }
-
-    if (ngaySinh) {
-      queryText += ` AND ngay_sinh = $${paramIndex}`;
-      params.push(ngaySinh);
-    }
-
-    queryText += ' LIMIT 1';
 
     const result = await query(queryText, params);
     return result.rows[0] || null;
+
   } catch (error) {
     if (error.code === 'DB_CONNECTION_ERROR' || error.code === 'DB_SSL_ERROR') {
       throw error;
@@ -388,6 +439,28 @@ export async function logAdminAction(adminId, action, tableName, recordId, oldDa
   }
 }
 
+/**
+ * Get connection pool statistics
+ * ✅ THÊM FUNCTION MỚI NÀY
+ */
+export function getPoolStats() {
+  if (!pool) {
+    return {
+      total: 0,
+      idle: 0,
+      waiting: 0,
+      status: 'not_initialized'
+    };
+  }
+
+  return {
+    total: pool.totalCount,
+    idle: pool.idleCount,
+    waiting: pool.waitingCount,
+    status: 'active'
+  };
+}
+
 export default {
   query,
   getClient,
@@ -398,6 +471,7 @@ export default {
   searchDiplomaCombo,
   logSearch,
   checkRateLimit,
-  logAdminAction
+  logAdminAction,
+  getPoolStats
 };
 
