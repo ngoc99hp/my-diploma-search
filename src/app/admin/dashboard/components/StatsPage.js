@@ -1,17 +1,43 @@
-// src/app/admin/dashboard/components/StatsPage.js
+// src/app/admin/dashboard/components/StatsPage.js - FIXED VERSION
 
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
 
 export default function StatsPage() {
+  const router = useRouter();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(false);
+
+  // Handle API errors including auth
+  const handleApiError = async (response) => {
+    if (response.status === 401) {
+      toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      setTimeout(() => router.push('/admin/login'), 1500);
+      return true;
+    }
+    if (response.status === 403) {
+      toast.error('Bạn không có quyền truy cập');
+      return true;
+    }
+    if (response.status >= 500) {
+      toast.error('Lỗi server, vui lòng thử lại sau');
+      return true;
+    }
+    return false;
+  };
 
   // Load stats
   const loadStats = async () => {
     try {
       const response = await fetch('/api/admin/stats');
+      
+      // Check for auth errors
+      if (await handleApiError(response)) {
+        return;
+      }
+      
       const data = await response.json();
       
       if (data.success) {
@@ -38,6 +64,11 @@ export default function StatsPage() {
         body: JSON.stringify({ action: 'clear_cache' })
       });
 
+      // Check for auth errors
+      if (await handleApiError(response)) {
+        return;
+      }
+
       const data = await response.json();
       
       if (data.success) {
@@ -52,19 +83,46 @@ export default function StatsPage() {
     }
   };
 
-  // Auto refresh
+  // Initial load
   useEffect(() => {
     loadStats();
   }, []);
 
+  // Auto refresh with Page Visibility API
   useEffect(() => {
     if (!autoRefresh) return;
 
-    const interval = setInterval(() => {
-      loadStats();
-    }, 5000); // Refresh every 5 seconds
+    let interval;
 
-    return () => clearInterval(interval);
+    const startRefresh = () => {
+      interval = setInterval(() => {
+        if (!document.hidden) {
+          loadStats();
+        }
+      }, 5000);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Clear interval when page is hidden
+        if (interval) clearInterval(interval);
+      } else {
+        // Restart interval when page becomes visible
+        loadStats();
+        startRefresh();
+      }
+    };
+
+    // Start initial refresh
+    startRefresh();
+    
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (interval) clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [autoRefresh]);
 
   if (loading) {
@@ -79,6 +137,12 @@ export default function StatsPage() {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
         <p className="text-red-700">Không thể tải thống kê</p>
+        <button 
+          onClick={loadStats}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          Thử lại
+        </button>
       </div>
     );
   }

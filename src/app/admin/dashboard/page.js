@@ -324,49 +324,55 @@ export default function AdminDashboard() {
     <>
       <Toaster position="top-right" richColors />
       <div className="min-h-screen bg-gray-50 flex">
-        <Sidebar
-          sidebarOpen={sidebarOpen}
-          setSidebarOpen={setSidebarOpen}
-          currentPage={currentPage}
-          setCurrentPage={setCurrentPage}
-          admin={admin}
-          handleLogout={handleLogout}
-        />
+        {/* Sidebar - Fixed width, no shrink */}
+        <div className="flex-shrink-0">
+          <Sidebar
+            sidebarOpen={sidebarOpen}
+            setSidebarOpen={setSidebarOpen}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            admin={admin}
+            handleLogout={handleLogout}
+          />
+        </div>
 
-        <div className="flex-1 overflow-auto">
-          <div className="p-8">
-            {currentPage === 'diplomas' && (
-              <DiplomasTable
-                diplomas={diplomas}
-                searchTerm={searchTerm}
-                setSearchTerm={setSearchTerm}
-                pagination={diplomasPagination}
-                onPageChange={(page) => setDiplomasPagination(prev => ({ ...prev, page }))}
-                onEdit={(diploma) => {
-                  setEditingDiploma(diploma);
-                  setShowModal(true);
-                }}
-                onDelete={handleDeleteDiploma}
-                onAddNew={() => {
-                  setEditingDiploma(null);
-                  setShowModal(true);
-                }}
-                onImport={() => setShowImportModal(true)}
-              />
-            )}
+        {/* Main Content - Proper overflow handling */}
+        <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-8">
+              {currentPage === 'diplomas' && (
+                <DiplomasTable
+                  diplomas={diplomas}
+                  searchTerm={searchTerm}
+                  setSearchTerm={setSearchTerm}
+                  pagination={diplomasPagination}
+                  onPageChange={(page) => setDiplomasPagination(prev => ({ ...prev, page }))}
+                  onEdit={(diploma) => {
+                    setEditingDiploma(diploma);
+                    setShowModal(true);
+                  }}
+                  onDelete={handleDeleteDiploma}
+                  onAddNew={() => {
+                    setEditingDiploma(null);
+                    setShowModal(true);
+                  }}
+                  onImport={() => setShowImportModal(true)}
+                />
+              )}
 
-            {currentPage === 'logs' && (
-              <LogsTable
-                logs={logs}
-                stats={stats}
-                pagination={logsPagination}
-                onPageChange={(page) => setLogsPagination(prev => ({ ...prev, page }))}
-              />
-            )}
+              {currentPage === 'logs' && (
+                <LogsTable
+                  logs={logs}
+                  stats={stats}
+                  pagination={logsPagination}
+                  onPageChange={(page) => setLogsPagination(prev => ({ ...prev, page }))}
+                />
+              )}
 
-            {currentPage === 'stats' && (
-              <StatsPage />
-            )}
+              {currentPage === 'stats' && (
+                <StatsPage />
+              )}
+            </div>
           </div>
         </div>
 
