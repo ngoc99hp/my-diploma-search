@@ -3,8 +3,28 @@ import { query } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
+// Validate JWT_SECRET on startup
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = '8h';
+
+// CRITICAL: Validate JWT secret exists and is strong
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET environment variable is not set');
+}
+
+if (JWT_SECRET === 'your-secret-key-change-in-production' || 
+    JWT_SECRET === 'change-this-to-a-very-long-random-secret-key-minimum-32-characters') {
+  throw new Error('FATAL: JWT_SECRET is using default value. Please change it in .env.local');
+}
+
+if (JWT_SECRET.length < 32) {
+  throw new Error('FATAL: JWT_SECRET must be at least 32 characters long');
+}
+
+// Log warning in development
+if (process.env.NODE_ENV === 'development') {
+  console.log('✅ JWT_SECRET validated:', JWT_SECRET.substring(0, 8) + '...');
+}
 
 export async function POST(request) {
   console.log('🔐 Login attempt started');

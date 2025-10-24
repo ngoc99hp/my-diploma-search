@@ -4,6 +4,11 @@ import jwt from 'jsonwebtoken';
 import * as XLSX from 'xlsx';
 
 const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET not configured');
+}
+
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_ROWS = 1000;
 

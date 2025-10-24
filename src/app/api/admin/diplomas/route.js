@@ -2,7 +2,11 @@
 import { query, logAdminAction } from '@/lib/db';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('FATAL: JWT_SECRET not configured');
+}
 
 function verifyAdmin(request) {
   const token = request.cookies.get('admin_token')?.value;
