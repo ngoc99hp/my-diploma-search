@@ -6,7 +6,7 @@ import { Toaster, toast } from 'sonner';
 
 // Import components
 import Sidebar from './components/Sidebar';
-
+import DiplomasTable from './components/DiplomasTable';
 import LogsTable from './components/LogsTable';
 import DiplomaModal from './components/DiplomaModal';
 import ImportModal from './components/ImportModal';
