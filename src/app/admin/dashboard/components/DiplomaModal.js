@@ -50,33 +50,39 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
     attachment_content_base64: ''
   });
 
-  const [activeTab, setActiveTab] = useState('basic'); // basic, education, certification
+  const [activeTab, setActiveTab] = useState('basic');
 
-  // ✅ FIX: Load data khi edit
+  // ✅ FIX: Helper function to format dates
+  const formatDateForInput = (dateStr) => {
+    if (!dateStr) return '';
+    
+    // Already in dd/MM/yyyy format
+    if (typeof dateStr === 'string' && dateStr.includes('/')) {
+      return dateStr;
+    }
+    
+    // ISO date (yyyy-MM-dd or full ISO string)
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return '';
+      
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch (error) {
+      console.error('Date format error:', error);
+      return '';
+    }
+  };
+
+  // ✅ FIX: Load data when editing
   useEffect(() => {
     if (diploma) {
       console.log('📝 Loading diploma for edit:', diploma);
       
-      // Helper function để format date từ ISO sang dd/MM/yyyy
-      const formatDateForInput = (dateStr) => {
-        if (!dateStr) return '';
-        
-        // Nếu đã có format dd/MM/yyyy thì giữ nguyên
-        if (dateStr.includes('/')) return dateStr;
-        
-        // Nếu là ISO date (yyyy-MM-dd), convert sang dd/MM/yyyy
-        try {
-          const date = new Date(dateStr);
-          const day = date.getDate().toString().padStart(2, '0');
-          const month = (date.getMonth() + 1).toString().padStart(2, '0');
-          const year = date.getFullYear();
-          return `${day}/${month}/${year}`;
-        } catch (error) {
-          return dateStr;
-        }
-      };
-
       setFormData({
+        // A. Thông tin chung
         phien_ban: diploma.phien_ban || '1.0',
         thong_tu: diploma.thong_tu || '27/2019',
         ten_vbcc: diploma.ten_vbcc || 'Bằng Cử nhân',
@@ -122,6 +128,8 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
         attachment_name: diploma.attachment_name || '',
         attachment_content_base64: diploma.attachment_content_base64 || ''
       });
+
+      console.log('✅ Form data loaded successfully');
     }
   }, [diploma]);
 

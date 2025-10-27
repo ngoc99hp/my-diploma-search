@@ -1,4 +1,4 @@
-// src/app/api/admin/diplomas/route.js - Complete CRUD for Diplomas
+// src/app/api/admin/diplomas/route.js - FIXED COMPLETE VERSION
 import { query, transaction, logAdminAction } from '@/lib/db';
 import { searchCache } from '@/lib/cache';
 import jwt from 'jsonwebtoken';
@@ -93,7 +93,7 @@ function parseVNDateToISO(vnDate) {
 
 /**
  * GET /api/admin/diplomas
- * Lấy danh sách văn bằng với pagination và tìm kiếm
+ * ✅ FIXED: Return ALL fields needed for edit form
  */
 export async function GET(request) {
   try {
@@ -127,12 +127,23 @@ export async function GET(request) {
     const countResult = await query(countQuery, queryParams);
     const total = parseInt(countResult.rows[0].total);
     
-    // Get diplomas
+    // ✅ FIXED: Get ALL fields for proper editing
     const diplomasQuery = `
       SELECT 
-        id, ma_dinh_danh_vbcc, so_hieu_vbcc, ho_va_ten,
-        ma_nguoi_hoc, nganh_dao_tao, chuyen_nganh_dao_tao,
-        nam_tot_nghiep, xep_loai, ngay_cap_vbcc,
+        id, phien_ban, thong_tu, ma_dinh_danh_vbcc, ten_vbcc,
+        nganh_dao_tao, ma_nganh_dao_tao, so_hieu_vbcc, so_ddcn,
+        ma_nguoi_hoc, ho_va_ten, ngay_sinh, noi_sinh, gioi_tinh,
+        dan_toc, quoc_tich, ten_truong, ma_co_so_dao_tao,
+        nam_tot_nghiep, so_quyet_dinh_cong_nhan_tot_nghiep,
+        ngay_quyet_dinh_cong_nhan_tot_nghiep, so_quyet_dinh_hoi_dong_danh_gia,
+        so_vao_so, xep_loai, don_vi_cap_bang, ma_don_vi_cap_bang,
+        ho_ten_nguoi_ky_vbcc, so_ddcn_nguoi_ky_vbcc, chuc_danh_nguoi_ky_vbcc,
+        ho_ten_nguoi_ky_vbcc_ban_giay, chuc_danh_nguoi_ky_vbcc_ban_giay,
+        dia_danh_cap_vbcc, ngay_cap_vbcc, chuyen_nganh_dao_tao,
+        ngay_nhap_hoc, ngon_ngu_dao_tao, thoi_gian_dao_tao,
+        tong_so_tin_chi, trinh_do_theo_khung_quoc_gia,
+        bac_trinh_do_theo_khung_quoc_gia, hinh_thuc_dao_tao,
+        ghi_chu, attachment_name,
         created_at, updated_at
       FROM diplomas
       ${whereClause}
