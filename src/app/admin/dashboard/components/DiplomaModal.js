@@ -1,56 +1,129 @@
-// src/app/admin/dashboard/components/DiplomaModal.js - Updated for Schema v2.0
+// src/app/admin/dashboard/components/DiplomaModal.js - FIXED EDIT MODE
 import { useState, useEffect } from 'react';
 
 export default function DiplomaModal({ diploma, onClose, onSave }) {
   const [formData, setFormData] = useState({
     // A. Thông tin chung (33 trường bắt buộc)
-    phien_ban: diploma?.phien_ban || '1.0',
-    thong_tu: diploma?.thong_tu || '27/2019',
-    ten_vbcc: diploma?.ten_vbcc || 'Bằng Cử nhân',
-    nganh_dao_tao: diploma?.nganh_dao_tao || '',
-    ma_nganh_dao_tao: diploma?.ma_nganh_dao_tao || '',
-    so_hieu_vbcc: diploma?.so_hieu_vbcc || '',
-    so_ddcn: diploma?.so_ddcn || '',
-    ma_nguoi_hoc: diploma?.ma_nguoi_hoc || '',
-    ho_va_ten: diploma?.ho_va_ten || '',
-    ngay_sinh: diploma?.ngay_sinh || '',
-    noi_sinh: diploma?.noi_sinh || '',
-    gioi_tinh: diploma?.gioi_tinh || 'Nam',
-    dan_toc: diploma?.dan_toc || 'Kinh',
-    quoc_tich: diploma?.quoc_tich || 'Việt Nam',
-    ten_truong: diploma?.ten_truong || 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
-    ma_co_so_dao_tao: diploma?.ma_co_so_dao_tao || 'HPU01',
-    nam_tot_nghiep: diploma?.nam_tot_nghiep || new Date().getFullYear(),
-    so_quyet_dinh_cong_nhan_tot_nghiep: diploma?.so_quyet_dinh_cong_nhan_tot_nghiep || '',
-    ngay_quyet_dinh_cong_nhan_tot_nghiep: diploma?.ngay_quyet_dinh_cong_nhan_tot_nghiep || '',
-    so_quyet_dinh_hoi_dong_danh_gia: diploma?.so_quyet_dinh_hoi_dong_danh_gia || '',
-    so_vao_so: diploma?.so_vao_so || '',
-    xep_loai: diploma?.xep_loai || '',
-    don_vi_cap_bang: diploma?.don_vi_cap_bang || 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
-    ma_don_vi_cap_bang: diploma?.ma_don_vi_cap_bang || 'HPU01',
-    ho_ten_nguoi_ky_vbcc: diploma?.ho_ten_nguoi_ky_vbcc || '',
-    so_ddcn_nguoi_ky_vbcc: diploma?.so_ddcn_nguoi_ky_vbcc || '',
-    chuc_danh_nguoi_ky_vbcc: diploma?.chuc_danh_nguoi_ky_vbcc || 'Hiệu trưởng',
-    ho_ten_nguoi_ky_vbcc_ban_giay: diploma?.ho_ten_nguoi_ky_vbcc_ban_giay || '',
-    chuc_danh_nguoi_ky_vbcc_ban_giay: diploma?.chuc_danh_nguoi_ky_vbcc_ban_giay || '',
-    dia_danh_cap_vbcc: diploma?.dia_danh_cap_vbcc || 'Hải Phòng',
-    ngay_cap_vbcc: diploma?.ngay_cap_vbcc || '',
+    phien_ban: '1.0',
+    thong_tu: '27/2019',
+    ten_vbcc: 'Bằng Cử nhân',
+    nganh_dao_tao: '',
+    ma_nganh_dao_tao: '',
+    so_hieu_vbcc: '',
+    so_ddcn: '',
+    ma_nguoi_hoc: '',
+    ho_va_ten: '',
+    ngay_sinh: '',
+    noi_sinh: '',
+    gioi_tinh: 'Nam',
+    dan_toc: 'Kinh',
+    quoc_tich: 'Việt Nam',
+    ten_truong: 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
+    ma_co_so_dao_tao: 'HPU01',
+    nam_tot_nghiep: new Date().getFullYear(),
+    so_quyet_dinh_cong_nhan_tot_nghiep: '',
+    ngay_quyet_dinh_cong_nhan_tot_nghiep: '',
+    so_quyet_dinh_hoi_dong_danh_gia: '',
+    so_vao_so: '',
+    xep_loai: '',
+    don_vi_cap_bang: 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
+    ma_don_vi_cap_bang: 'HPU01',
+    ho_ten_nguoi_ky_vbcc: '',
+    so_ddcn_nguoi_ky_vbcc: '',
+    chuc_danh_nguoi_ky_vbcc: 'Hiệu trưởng',
+    ho_ten_nguoi_ky_vbcc_ban_giay: '',
+    chuc_danh_nguoi_ky_vbcc_ban_giay: '',
+    dia_danh_cap_vbcc: 'Hải Phòng',
+    ngay_cap_vbcc: '',
     
     // B. Phụ lục bằng (11 trường)
-    chuyen_nganh_dao_tao: diploma?.chuyen_nganh_dao_tao || '',
-    ngay_nhap_hoc: diploma?.ngay_nhap_hoc || '',
-    ngon_ngu_dao_tao: diploma?.ngon_ngu_dao_tao || 'Tiếng Việt',
-    thoi_gian_dao_tao: diploma?.thoi_gian_dao_tao || '4 năm',
-    tong_so_tin_chi: diploma?.tong_so_tin_chi || '',
-    trinh_do_theo_khung_quoc_gia: diploma?.trinh_do_theo_khung_quoc_gia || 'Trình độ 6',
-    bac_trinh_do_theo_khung_quoc_gia: diploma?.bac_trinh_do_theo_khung_quoc_gia || 'Đại học',
-    hinh_thuc_dao_tao: diploma?.hinh_thuc_dao_tao || 'Chính quy',
-    ghi_chu: diploma?.ghi_chu || '',
-    attachment_name: diploma?.attachment_name || '',
-    attachment_content_base64: diploma?.attachment_content_base64 || ''
+    chuyen_nganh_dao_tao: '',
+    ngay_nhap_hoc: '',
+    ngon_ngu_dao_tao: 'Tiếng Việt',
+    thoi_gian_dao_tao: '4 năm',
+    tong_so_tin_chi: '',
+    trinh_do_theo_khung_quoc_gia: 'Trình độ 6',
+    bac_trinh_do_theo_khung_quoc_gia: 'Đại học',
+    hinh_thuc_dao_tao: 'Chính quy',
+    ghi_chu: '',
+    attachment_name: '',
+    attachment_content_base64: ''
   });
 
   const [activeTab, setActiveTab] = useState('basic'); // basic, education, certification
+
+  // ✅ FIX: Load data khi edit
+  useEffect(() => {
+    if (diploma) {
+      console.log('📝 Loading diploma for edit:', diploma);
+      
+      // Helper function để format date từ ISO sang dd/MM/yyyy
+      const formatDateForInput = (dateStr) => {
+        if (!dateStr) return '';
+        
+        // Nếu đã có format dd/MM/yyyy thì giữ nguyên
+        if (dateStr.includes('/')) return dateStr;
+        
+        // Nếu là ISO date (yyyy-MM-dd), convert sang dd/MM/yyyy
+        try {
+          const date = new Date(dateStr);
+          const day = date.getDate().toString().padStart(2, '0');
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}/${month}/${year}`;
+        } catch (error) {
+          return dateStr;
+        }
+      };
+
+      setFormData({
+        phien_ban: diploma.phien_ban || '1.0',
+        thong_tu: diploma.thong_tu || '27/2019',
+        ten_vbcc: diploma.ten_vbcc || 'Bằng Cử nhân',
+        nganh_dao_tao: diploma.nganh_dao_tao || '',
+        ma_nganh_dao_tao: diploma.ma_nganh_dao_tao || '',
+        so_hieu_vbcc: diploma.so_hieu_vbcc || '',
+        so_ddcn: diploma.so_ddcn || '',
+        ma_nguoi_hoc: diploma.ma_nguoi_hoc || '',
+        ho_va_ten: diploma.ho_va_ten || '',
+        ngay_sinh: formatDateForInput(diploma.ngay_sinh),
+        noi_sinh: diploma.noi_sinh || '',
+        gioi_tinh: diploma.gioi_tinh || 'Nam',
+        dan_toc: diploma.dan_toc || 'Kinh',
+        quoc_tich: diploma.quoc_tich || 'Việt Nam',
+        ten_truong: diploma.ten_truong || 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
+        ma_co_so_dao_tao: diploma.ma_co_so_dao_tao || 'HPU01',
+        nam_tot_nghiep: diploma.nam_tot_nghiep || new Date().getFullYear(),
+        so_quyet_dinh_cong_nhan_tot_nghiep: diploma.so_quyet_dinh_cong_nhan_tot_nghiep || '',
+        ngay_quyet_dinh_cong_nhan_tot_nghiep: formatDateForInput(diploma.ngay_quyet_dinh_cong_nhan_tot_nghiep),
+        so_quyet_dinh_hoi_dong_danh_gia: diploma.so_quyet_dinh_hoi_dong_danh_gia || '',
+        so_vao_so: diploma.so_vao_so || '',
+        xep_loai: diploma.xep_loai || '',
+        don_vi_cap_bang: diploma.don_vi_cap_bang || 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
+        ma_don_vi_cap_bang: diploma.ma_don_vi_cap_bang || 'HPU01',
+        ho_ten_nguoi_ky_vbcc: diploma.ho_ten_nguoi_ky_vbcc || '',
+        so_ddcn_nguoi_ky_vbcc: diploma.so_ddcn_nguoi_ky_vbcc || '',
+        chuc_danh_nguoi_ky_vbcc: diploma.chuc_danh_nguoi_ky_vbcc || 'Hiệu trưởng',
+        ho_ten_nguoi_ky_vbcc_ban_giay: diploma.ho_ten_nguoi_ky_vbcc_ban_giay || '',
+        chuc_danh_nguoi_ky_vbcc_ban_giay: diploma.chuc_danh_nguoi_ky_vbcc_ban_giay || '',
+        dia_danh_cap_vbcc: diploma.dia_danh_cap_vbcc || 'Hải Phòng',
+        ngay_cap_vbcc: formatDateForInput(diploma.ngay_cap_vbcc),
+        
+        // B. Phụ lục bằng
+        chuyen_nganh_dao_tao: diploma.chuyen_nganh_dao_tao || '',
+        ngay_nhap_hoc: formatDateForInput(diploma.ngay_nhap_hoc),
+        ngon_ngu_dao_tao: diploma.ngon_ngu_dao_tao || 'Tiếng Việt',
+        thoi_gian_dao_tao: diploma.thoi_gian_dao_tao || '4 năm',
+        tong_so_tin_chi: diploma.tong_so_tin_chi || '',
+        trinh_do_theo_khung_quoc_gia: diploma.trinh_do_theo_khung_quoc_gia || 'Trình độ 6',
+        bac_trinh_do_theo_khung_quoc_gia: diploma.bac_trinh_do_theo_khung_quoc_gia || 'Đại học',
+        hinh_thuc_dao_tao: diploma.hinh_thuc_dao_tao || 'Chính quy',
+        ghi_chu: diploma.ghi_chu || '',
+        attachment_name: diploma.attachment_name || '',
+        attachment_content_base64: diploma.attachment_content_base64 || ''
+      });
+    }
+  }, [diploma]);
 
   useEffect(() => {
     const handleEsc = (e) => {
@@ -75,6 +148,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    console.log('💾 Saving diploma data:', formData);
     onSave(formData);
   };
 
@@ -156,7 +230,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.so_hieu_vbcc}
                       onChange={(e) => updateField('so_hieu_vbcc', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="001/ĐHCN-2024"
                     />
                   </div>
@@ -170,7 +244,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.so_vao_so}
                       onChange={(e) => updateField('so_vao_so', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="001/2024"
                     />
                   </div>
@@ -183,7 +257,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.ten_vbcc}
                       onChange={(e) => updateField('ten_vbcc', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
                       <option value="Bằng Cử nhân">Bằng Cử nhân</option>
                       <option value="Bằng Kỹ sư">Bằng Kỹ sư</option>
@@ -201,7 +275,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.ma_nguoi_hoc}
                       onChange={(e) => updateField('ma_nguoi_hoc', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="2020600001"
                     />
                   </div>
@@ -215,7 +289,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.ho_va_ten}
                       onChange={(e) => updateField('ho_va_ten', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="NGUYỄN VĂN AN"
                     />
                   </div>
@@ -229,7 +303,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.ngay_sinh}
                       onChange={(e) => updateField('ngay_sinh', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="15/03/2002"
                     />
                   </div>
@@ -243,7 +317,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.noi_sinh}
                       onChange={(e) => updateField('noi_sinh', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="Hải Phòng"
                     />
                   </div>
@@ -256,7 +330,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.gioi_tinh}
                       onChange={(e) => updateField('gioi_tinh', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
                       <option value="Nam">Nam</option>
                       <option value="Nữ">Nữ</option>
@@ -272,7 +346,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.dan_toc}
                       onChange={(e) => updateField('dan_toc', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="Kinh"
                     />
                   </div>
@@ -286,20 +360,20 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.so_ddcn}
                       onChange={(e) => updateField('so_ddcn', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="001202003456"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Quốc tích
+                      Quốc tịch
                     </label>
                     <input
                       type="text"
                       value={formData.quoc_tich}
                       onChange={(e) => updateField('quoc_tich', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
                 </div>
@@ -319,7 +393,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.nganh_dao_tao}
                       onChange={(e) => updateField('nganh_dao_tao', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="Công nghệ Thông tin"
                     />
                   </div>
@@ -333,7 +407,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.ma_nganh_dao_tao}
                       onChange={(e) => updateField('ma_nganh_dao_tao', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="7480201"
                     />
                   </div>
@@ -347,7 +421,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.chuyen_nganh_dao_tao}
                       onChange={(e) => updateField('chuyen_nganh_dao_tao', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="Kỹ thuật Phần mềm"
                     />
                   </div>
@@ -360,7 +434,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.hinh_thuc_dao_tao}
                       onChange={(e) => updateField('hinh_thuc_dao_tao', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
                       <option value="Chính quy">Chính quy</option>
                       <option value="Liên thông">Liên thông</option>
@@ -378,7 +452,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.thoi_gian_dao_tao}
                       onChange={(e) => updateField('thoi_gian_dao_tao', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="4 năm"
                     />
                   </div>
@@ -391,7 +465,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       type="text"
                       value={formData.ngay_nhap_hoc}
                       onChange={(e) => updateField('ngay_nhap_hoc', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="01/09/2020"
                     />
                   </div>
@@ -404,7 +478,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       type="number"
                       value={formData.tong_so_tin_chi}
                       onChange={(e) => updateField('tong_so_tin_chi', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="128"
                     />
                   </div>
@@ -418,7 +492,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.ngon_ngu_dao_tao}
                       onChange={(e) => updateField('ngon_ngu_dao_tao', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
 
@@ -430,7 +504,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.trinh_do_theo_khung_quoc_gia}
                       onChange={(e) => updateField('trinh_do_theo_khung_quoc_gia', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
                       <option value="Trình độ 6">Trình độ 6</option>
                       <option value="Trình độ 7">Trình độ 7</option>
@@ -446,7 +520,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.bac_trinh_do_theo_khung_quoc_gia}
                       onChange={(e) => updateField('bac_trinh_do_theo_khung_quoc_gia', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
                       <option value="Đại học">Đại học</option>
                       <option value="Thạc sĩ">Thạc sĩ</option>
@@ -463,7 +537,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.nam_tot_nghiep}
                       onChange={(e) => updateField('nam_tot_nghiep', parseInt(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
 
@@ -474,7 +548,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                     <select
                       value={formData.xep_loai}
                       onChange={(e) => updateField('xep_loai', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
                       <option value="">Chọn xếp loại</option>
                       <option value="Xuất sắc">Xuất sắc</option>
@@ -492,7 +566,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       value={formData.ghi_chu}
                       onChange={(e) => updateField('ghi_chu', e.target.value)}
                       rows="3"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="Thông tin bổ sung..."
                     />
                   </div>
@@ -513,7 +587,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.so_quyet_dinh_cong_nhan_tot_nghiep}
                       onChange={(e) => updateField('so_quyet_dinh_cong_nhan_tot_nghiep', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="1234/QĐ-HPU"
                     />
                   </div>
@@ -527,7 +601,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.ngay_quyet_dinh_cong_nhan_tot_nghiep}
                       onChange={(e) => updateField('ngay_quyet_dinh_cong_nhan_tot_nghiep', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="15/06/2024"
                     />
                   </div>
@@ -540,7 +614,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       type="text"
                       value={formData.so_quyet_dinh_hoi_dong_danh_gia}
                       onChange={(e) => updateField('so_quyet_dinh_hoi_dong_danh_gia', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="(Nếu có)"
                     />
                   </div>
@@ -554,7 +628,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.don_vi_cap_bang}
                       onChange={(e) => updateField('don_vi_cap_bang', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
 
@@ -567,7 +641,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.ma_don_vi_cap_bang}
                       onChange={(e) => updateField('ma_don_vi_cap_bang', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
 
@@ -580,7 +654,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.dia_danh_cap_vbcc}
                       onChange={(e) => updateField('dia_danh_cap_vbcc', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
 
@@ -593,7 +667,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.ngay_cap_vbcc}
                       onChange={(e) => updateField('ngay_cap_vbcc', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="20/06/2024"
                     />
                   </div>
@@ -611,7 +685,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.ho_ten_nguoi_ky_vbcc}
                       onChange={(e) => updateField('ho_ten_nguoi_ky_vbcc', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="PGS.TS. Nguyễn Văn B"
                     />
                   </div>
@@ -625,7 +699,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.so_ddcn_nguoi_ky_vbcc}
                       onChange={(e) => updateField('so_ddcn_nguoi_ky_vbcc', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="001987654321"
                     />
                   </div>
@@ -639,7 +713,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       required
                       value={formData.chuc_danh_nguoi_ky_vbcc}
                       onChange={(e) => updateField('chuc_danh_nguoi_ky_vbcc', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       placeholder="Hiệu trưởng"
                     />
                   </div>
@@ -656,7 +730,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       type="text"
                       value={formData.ho_ten_nguoi_ky_vbcc_ban_giay}
                       onChange={(e) => updateField('ho_ten_nguoi_ky_vbcc_ban_giay', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
 
@@ -668,7 +742,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       type="text"
                       value={formData.chuc_danh_nguoi_ky_vbcc_ban_giay}
                       onChange={(e) => updateField('chuc_danh_nguoi_ky_vbcc_ban_giay', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
 
@@ -684,7 +758,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       type="text"
                       value={formData.ten_truong}
                       onChange={(e) => updateField('ten_truong', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
 
@@ -696,7 +770,7 @@ export default function DiplomaModal({ diploma, onClose, onSave }) {
                       type="text"
                       value={formData.ma_co_so_dao_tao}
                       onChange={(e) => updateField('ma_co_so_dao_tao', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     />
                   </div>
                 </div>
