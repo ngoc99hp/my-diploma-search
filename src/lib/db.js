@@ -203,7 +203,8 @@ export async function testConnection() {
 }
 
 /**
- * Tìm kiếm văn bằng theo số hiệu (Schema v2)
+ * ✅ FIXED: Tìm kiếm văn bằng theo số hiệu
+ * Schema: ngay_sinh, ngay_cap_vbcc are now DATE type
  */
 export async function searchDiplomaByNumber(soHieuVBCC) {
   try {
@@ -212,7 +213,7 @@ export async function searchDiplomaByNumber(soHieuVBCC) {
         ma_dinh_danh_vbcc,
         so_hieu_vbcc,
         ho_va_ten,
-        ngay_sinh,
+        ngay_sinh, -- DATE type → returns 'yyyy-MM-dd'
         noi_sinh,
         gioi_tinh,
         ma_nguoi_hoc,
@@ -223,10 +224,13 @@ export async function searchDiplomaByNumber(soHieuVBCC) {
         hinh_thuc_dao_tao,
         thoi_gian_dao_tao,
         don_vi_cap_bang,
-        ngay_cap_vbcc,
+        ngay_cap_vbcc, -- DATE type
         dia_danh_cap_vbcc,
         trinh_do_theo_khung_quoc_gia,
-        bac_trinh_do_theo_khung_quoc_gia
+        bac_trinh_do_theo_khung_quoc_gia,
+        -- ✅ Format dates for display
+        TO_CHAR(ngay_sinh, 'DD/MM/YYYY') as ngay_sinh_formatted,
+        TO_CHAR(ngay_cap_vbcc, 'DD/MM/YYYY') as ngay_cap_formatted
       FROM diplomas
       WHERE so_hieu_vbcc = $1
       AND is_active = TRUE
@@ -245,8 +249,8 @@ export async function searchDiplomaByNumber(soHieuVBCC) {
 }
 
 /**
- * Tìm kiếm văn bằng theo Mã SV + Họ tên/Ngày sinh
- * OPTIMIZED VERSION với prepared statement hints
+ * ✅ FIXED: Tìm kiếm văn bằng theo MÃ SV + Họ tên/Ngày sinh
+ * Schema: ngay_sinh is now DATE type
  */
 export async function searchDiplomaCombo(maNguoiHoc, hoVaTen = null, ngaySinh = null) {
   try {
@@ -254,12 +258,12 @@ export async function searchDiplomaCombo(maNguoiHoc, hoVaTen = null, ngaySinh = 
       throw new Error('Vui lòng nhập thêm Họ tên hoặc Ngày sinh');
     }
 
-    // ✅ OPTIMIZATION: Chọn query tối ưu dựa trên input
     let queryText;
     let params;
 
     if (hoVaTen && ngaySinh) {
-      // Cả họ tên VÀ ngày sinh - query chính xác nhất
+      // ✅ FIX: Convert dd/MM/yyyy input to DATE for comparison
+      // User input: "15/03/2002" → Need to convert to DATE
       queryText = `
         SELECT 
           ma_dinh_danh_vbcc, so_hieu_vbcc, ho_va_ten, ngay_sinh, 
@@ -267,18 +271,19 @@ export async function searchDiplomaCombo(maNguoiHoc, hoVaTen = null, ngaySinh = 
           chuyen_nganh_dao_tao, xep_loai, nam_tot_nghiep, 
           hinh_thuc_dao_tao, thoi_gian_dao_tao, don_vi_cap_bang, 
           ngay_cap_vbcc, dia_danh_cap_vbcc, 
-          trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia
+          trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia,
+          TO_CHAR(ngay_sinh, 'DD/MM/YYYY') as ngay_sinh_formatted,
+          TO_CHAR(ngay_cap_vbcc, 'DD/MM/YYYY') as ngay_cap_formatted
         FROM diplomas
         WHERE ma_nguoi_hoc = $1
           AND UPPER(ho_va_ten) = UPPER($2)
-          AND ngay_sinh = $3
+          AND ngay_sinh = TO_DATE($3, 'DD/MM/YYYY')
           AND is_active = TRUE
         LIMIT 1
       `;
       params = [maNguoiHoc, hoVaTen, ngaySinh];
 
     } else if (hoVaTen) {
-      // Chỉ có họ tên
       queryText = `
         SELECT 
           ma_dinh_danh_vbcc, so_hieu_vbcc, ho_va_ten, ngay_sinh, 
@@ -286,7 +291,9 @@ export async function searchDiplomaCombo(maNguoiHoc, hoVaTen = null, ngaySinh = 
           chuyen_nganh_dao_tao, xep_loai, nam_tot_nghiep, 
           hinh_thuc_dao_tao, thoi_gian_dao_tao, don_vi_cap_bang, 
           ngay_cap_vbcc, dia_danh_cap_vbcc, 
-          trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia
+          trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia,
+          TO_CHAR(ngay_sinh, 'DD/MM/YYYY') as ngay_sinh_formatted,
+          TO_CHAR(ngay_cap_vbcc, 'DD/MM/YYYY') as ngay_cap_formatted
         FROM diplomas
         WHERE ma_nguoi_hoc = $1
           AND UPPER(ho_va_ten) = UPPER($2)
@@ -296,7 +303,7 @@ export async function searchDiplomaCombo(maNguoiHoc, hoVaTen = null, ngaySinh = 
       params = [maNguoiHoc, hoVaTen];
 
     } else {
-      // Chỉ có ngày sinh
+      // Only ngay_sinh
       queryText = `
         SELECT 
           ma_dinh_danh_vbcc, so_hieu_vbcc, ho_va_ten, ngay_sinh, 
@@ -304,10 +311,12 @@ export async function searchDiplomaCombo(maNguoiHoc, hoVaTen = null, ngaySinh = 
           chuyen_nganh_dao_tao, xep_loai, nam_tot_nghiep, 
           hinh_thuc_dao_tao, thoi_gian_dao_tao, don_vi_cap_bang, 
           ngay_cap_vbcc, dia_danh_cap_vbcc, 
-          trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia
+          trinh_do_theo_khung_quoc_gia, bac_trinh_do_theo_khung_quoc_gia,
+          TO_CHAR(ngay_sinh, 'DD/MM/YYYY') as ngay_sinh_formatted,
+          TO_CHAR(ngay_cap_vbcc, 'DD/MM/YYYY') as ngay_cap_formatted
         FROM diplomas
         WHERE ma_nguoi_hoc = $1
-          AND ngay_sinh = $2
+          AND ngay_sinh = TO_DATE($2, 'DD/MM/YYYY')
           AND is_active = TRUE
         LIMIT 1
       `;
@@ -325,6 +334,7 @@ export async function searchDiplomaCombo(maNguoiHoc, hoVaTen = null, ngaySinh = 
     throw new Error('Lỗi khi tra cứu văn bằng');
   }
 }
+
 
 /**
  * Log tra cứu vào database
