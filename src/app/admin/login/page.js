@@ -121,13 +121,6 @@ export default function AdminLogin() {
                 )}
               </button>
             </form>
-
-            {/* Demo Account Info */}
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-xs text-gray-500 text-center">
-                Tài khoản demo: <span className="font-mono font-medium">admin</span> / <span className="font-mono font-medium">password</span>
-              </p>
-            </div>
           </div>
 
           {/* Back to Home */}
