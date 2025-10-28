@@ -122,7 +122,7 @@ export async function GET(request) {
       
       // E. NGƯỜI KÝ
       { header: '* Họ tên người ký', key: 'ho_ten_nguoi_ky_vbcc', width: 30 },
-      { header: '* Số CCCD người ký', key: 'so_ddcn_nguoi_ky_vbcc', width: 15 },
+      { header: 'Số CCCD người ký', key: 'so_ddcn_nguoi_ky_vbcc', width: 15 },
       { header: '* Chức danh người ký', key: 'chuc_danh_nguoi_ky_vbcc', width: 20 },
       { header: 'Họ tên NK bản giấy', key: 'ho_ten_nguoi_ky_vbcc_ban_giay', width: 30 },
       { header: 'Chức danh NK bản giấy', key: 'chuc_danh_nguoi_ky_vbcc_ban_giay', width: 20 },
@@ -166,8 +166,8 @@ export async function GET(request) {
       thoi_gian_dao_tao: '4 năm',
       ngay_nhap_hoc: '01/09/2020',
       ngon_ngu_dao_tao: 'Tiếng Việt',
-      tong_so_tin_chi: 128,
-      trinh_do_theo_khung_quoc_gia: 'Trình độ 6',
+      tong_so_tin_chi: 120,
+      trinh_do_theo_khung_quoc_gia: 'Bậc 6',
       bac_trinh_do_theo_khung_quoc_gia: 'Đại học',
       nam_tot_nghiep: 2024,
       xep_loai: 'Khá',
@@ -175,16 +175,16 @@ export async function GET(request) {
       ngay_quyet_dinh_cong_nhan_tot_nghiep: '15/06/2024',
       so_quyet_dinh_hoi_dong_danh_gia: '',
       don_vi_cap_bang: 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
-      ma_don_vi_cap_bang: 'HPU01',
+      ma_don_vi_cap_bang: 'HPU',
       ngay_cap_vbcc: '20/06/2024',
       dia_danh_cap_vbcc: 'Hải Phòng',
-      ho_ten_nguoi_ky_vbcc: 'PGS.TS. NGUYỄN VĂN B',
+      ho_ten_nguoi_ky_vbcc: 'TS. NGUYỄN TIẾN THANH',
       so_ddcn_nguoi_ky_vbcc: '001987654321',
       chuc_danh_nguoi_ky_vbcc: 'Hiệu trưởng',
       ho_ten_nguoi_ky_vbcc_ban_giay: '',
       chuc_danh_nguoi_ky_vbcc_ban_giay: '',
       ten_truong: 'Trường Đại học Quản lý và Công nghệ Hải Phòng',
-      ma_co_so_dao_tao: 'HPU01',
+      ma_co_so_dao_tao: 'HPU',
       ghi_chu: ''
     });
     
