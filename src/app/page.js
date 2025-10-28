@@ -24,6 +24,22 @@ function SearchForm() {
 
   const { executeRecaptcha } = useGoogleReCaptcha();
 
+  const formatDate = (isoString) => {
+  if (!isoString) return "Chưa cập nhật";
+  try {
+    const date = new Date(isoString);
+    // Kiểm tra xem có phải là ngày hợp lệ không
+    if (isNaN(date.getTime())) return "Chưa cập nhật";
+    return date.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  } catch (error) {
+    return "Chưa cập nhật";
+  }
+};
+
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
 
@@ -430,7 +446,7 @@ function SearchForm() {
               </div>
 
               {/* Thông tin định danh */}
-              <div className="mb-6">
+              {/* <div className="mb-6">
                 <h3 className="text-md font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100">
                   🔖 Mã định danh
                 </h3>
@@ -442,7 +458,7 @@ function SearchForm() {
                     {result.ma_dinh_danh_vbcc}
                   </p>
                 </div>
-              </div>
+              </div> */}
 
               {/* Thông tin sinh viên */}
               <div className="mb-6">
@@ -451,7 +467,7 @@ function SearchForm() {
                 </h3>
                 <div className="space-y-0">
                   {renderField("Họ và tên", result.ho_va_ten, true)}
-                  {renderField("Ngày sinh", result.ngay_sinh)}
+                  {renderField("Ngày sinh", formatDate(result.ngay_sinh))}
                   {renderField("Nơi sinh", result.noi_sinh)}
                   {renderField("Giới tính", result.gioi_tinh)}
                   {renderField("Mã sinh viên", result.ma_nguoi_hoc)}
@@ -561,7 +577,7 @@ function SearchForm() {
                   </h3>
                   <div className="space-y-0">
                     {renderField("Đơn vị cấp bằng", result.don_vi_cap_bang)}
-                    {renderField("Ngày cấp", result.ngay_cap_vbcc)}
+                    {renderField("Ngày cấp", formatDate(result.ngay_cap_vbcc))}
                     {renderField("Nơi cấp", result.dia_danh_cap_vbcc)}
                   </div>
                 </div>

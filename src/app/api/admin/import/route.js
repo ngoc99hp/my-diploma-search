@@ -1,4 +1,4 @@
-// src/app/api/admin/import/route.js - Import diplomas from Excel
+// src/app/api/admin/import/route.js - Import diplomas from Excel with detailed error reporting
 import { query, transaction, logAdminAction } from '@/lib/db';
 import { searchCache } from '@/lib/cache';
 import jwt from 'jsonwebtoken';
@@ -31,6 +31,17 @@ function parseVNDateToISO(vnDate) {
     const parts = vnDate.trim().split('/');
     if (parts.length !== 3) return null;
     const [day, month, year] = parts;
+    
+    // Validate numbers
+    const d = parseInt(day);
+    const m = parseInt(month);
+    const y = parseInt(year);
+    
+    if (isNaN(d) || isNaN(m) || isNaN(y)) return null;
+    if (d < 1 || d > 31) return null;
+    if (m < 1 || m > 12) return null;
+    if (y < 1900 || y > 2100) return null;
+    
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
   
@@ -46,22 +57,132 @@ function parseVNDateToISO(vnDate) {
 }
 
 /**
- * Validate row data
+ * Validate row data with detailed error messages
  */
 function validateRow(row, rowNumber) {
   const errors = [];
   
-  // Required fields
-  if (!row.so_hieu_vbcc?.trim()) errors.push('Thiếu số hiệu văn bằng');
-  if (!row.ma_nguoi_hoc?.trim()) errors.push('Thiếu mã sinh viên');
-  if (!row.ho_va_ten?.trim()) errors.push('Thiếu họ tên');
-  if (!row.ngay_sinh) errors.push('Thiếu ngày sinh');
-  if (!row.nganh_dao_tao?.trim()) errors.push('Thiếu ngành đào tạo');
-  if (!row.ma_nganh_dao_tao?.trim()) errors.push('Thiếu mã ngành');
+  // Required fields validation
+  if (!row.so_hieu_vbcc?.trim()) {
+    errors.push('Thiếu Số hiệu văn bằng (cột A)');
+  }
   
-  // Gender validation
-  if (row.gioi_tinh && !['Nam', 'Nữ'].includes(row.gioi_tinh)) {
-    errors.push('Giới tính phải là "Nam" hoặc "Nữ"');
+  if (!row.ma_nguoi_hoc?.trim()) {
+    errors.push('Thiếu Mã sinh viên (cột D)');
+  }
+  
+  if (!row.ho_va_ten?.trim()) {
+    errors.push('Thiếu Họ và tên (cột F)');
+  }
+  
+  if (!row.ngay_sinh) {
+    errors.push('Thiếu Ngày sinh (cột G)');
+  } else {
+    const ngaySinh = parseVNDateToISO(row.ngay_sinh);
+    if (!ngaySinh) {
+      errors.push('Ngày sinh không đúng định dạng (cột G). Yêu cầu: dd/MM/yyyy');
+    }
+  }
+  
+  if (!row.noi_sinh?.trim()) {
+    errors.push('Thiếu Nơi sinh (cột H)');
+  }
+  
+  if (!row.gioi_tinh?.trim()) {
+    errors.push('Thiếu Giới tính (cột I)');
+  } else if (!['Nam', 'Nữ'].includes(row.gioi_tinh.trim())) {
+    errors.push('Giới tính phải là "Nam" hoặc "Nữ" (cột I)');
+  }
+  
+  if (!row.dan_toc?.trim()) {
+    errors.push('Thiếu Dân tộc (cột J)');
+  }
+  
+  if (!row.nganh_dao_tao?.trim()) {
+    errors.push('Thiếu Ngành đào tạo (cột L)');
+  }
+  
+  if (!row.ma_nganh_dao_tao?.trim()) {
+    errors.push('Thiếu Mã ngành (cột M)');
+  }
+  
+  if (!row.chuyen_nganh_dao_tao?.trim()) {
+    errors.push('Thiếu Chuyên ngành đào tạo (cột N)');
+  }
+  
+  if (!row.hinh_thuc_dao_tao?.trim()) {
+    errors.push('Thiếu Hình thức đào tạo (cột O)');
+  }
+  
+  if (!row.thoi_gian_dao_tao?.trim()) {
+    errors.push('Thiếu Thời gian đào tạo (cột P)');
+  }
+  
+  if (!row.trinh_do_theo_khung_quoc_gia?.trim()) {
+    errors.push('Thiếu Trình độ KHQG (cột T)');
+  }
+  
+  if (!row.bac_trinh_do_theo_khung_quoc_gia?.trim()) {
+    errors.push('Thiếu Bậc đào tạo (cột U)');
+  }
+  
+  if (!row.nam_tot_nghiep) {
+    errors.push('Thiếu Năm tốt nghiệp (cột V)');
+  } else {
+    const nam = parseInt(row.nam_tot_nghiep);
+    if (isNaN(nam) || nam < 1900 || nam > 2100) {
+      errors.push('Năm tốt nghiệp không hợp lệ (cột V)');
+    }
+  }
+  
+  if (!row.so_quyet_dinh_cong_nhan_tot_nghiep?.trim()) {
+    errors.push('Thiếu Số QĐ CNTN (cột X)');
+  }
+  
+  if (!row.ngay_quyet_dinh_cong_nhan_tot_nghiep) {
+    errors.push('Thiếu Ngày QĐ CNTN (cột Y)');
+  } else {
+    const ngayQD = parseVNDateToISO(row.ngay_quyet_dinh_cong_nhan_tot_nghiep);
+    if (!ngayQD) {
+      errors.push('Ngày QĐ CNTN không đúng định dạng (cột Y). Yêu cầu: dd/MM/yyyy');
+    }
+  }
+  
+  if (!row.don_vi_cap_bang?.trim()) {
+    errors.push('Thiếu Đơn vị cấp bằng (cột AA)');
+  }
+  
+  if (!row.ngay_cap_vbcc) {
+    errors.push('Thiếu Ngày cấp VB (cột AC)');
+  } else {
+    const ngayCap = parseVNDateToISO(row.ngay_cap_vbcc);
+    if (!ngayCap) {
+      errors.push('Ngày cấp VB không đúng định dạng (cột AC). Yêu cầu: dd/MM/yyyy');
+    }
+  }
+  
+  if (!row.ho_ten_nguoi_ky_vbcc?.trim()) {
+    errors.push('Thiếu Họ tên người ký (cột AE)');
+  }
+  
+  if (!row.chuc_danh_nguoi_ky_vbcc?.trim()) {
+    errors.push('Thiếu Chức danh người ký (cột AG)');
+  }
+  
+  // Optional date validation
+  if (row.ngay_nhap_hoc) {
+    const ngayNhapHoc = parseVNDateToISO(row.ngay_nhap_hoc);
+    if (!ngayNhapHoc) {
+      errors.push('Ngày nhập học không đúng định dạng (cột Q). Yêu cầu: dd/MM/yyyy');
+    }
+  }
+  
+  // Credit validation
+  if (row.tong_so_tin_chi) {
+    const tinChi = parseInt(row.tong_so_tin_chi);
+    if (isNaN(tinChi) || tinChi < 0) {
+      errors.push('Tổng số tín chỉ không hợp lệ (cột S)');
+    }
   }
   
   return errors;
@@ -240,7 +361,7 @@ export async function GET(request) {
 
 /**
  * POST /api/admin/import
- * Import diplomas from Excel file
+ * Import diplomas from Excel file with detailed error reporting
  */
 export async function POST(request) {
   try {
@@ -280,17 +401,17 @@ export async function POST(request) {
     
     // Parse rows
     const rows = [];
-    const errors = [];
-    let rowNumber = 1;
+    const validationErrors = [];
+    let totalRows = 0;
     
     worksheet.eachRow((row, index) => {
       // Skip header row
       if (index === 1) return;
       
-      rowNumber = index;
-      
       // Skip empty rows
       if (!row.getCell('A').value) return;
+      
+      totalRows++;
       
       const rowData = {
         so_hieu_vbcc: row.getCell('A').value?.toString().trim(),
@@ -336,49 +457,89 @@ export async function POST(request) {
       // Validate row
       const rowErrors = validateRow(rowData, index);
       if (rowErrors.length > 0) {
-        errors.push({
+        validationErrors.push({
           row: index,
+          so_hieu: rowData.so_hieu_vbcc || '(Trống)',
+          ma_sv: rowData.ma_nguoi_hoc || '(Trống)',
+          ho_ten: rowData.ho_va_ten || '(Trống)',
           errors: rowErrors
         });
         return;
       }
       
-      rows.push(rowData);
+      rows.push({ ...rowData, excelRow: index });
     });
+    
+    // If all rows have validation errors
+    if (rows.length === 0 && validationErrors.length > 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: `Tất cả ${validationErrors.length} dòng đều có lỗi validation. Vui lòng kiểm tra lại dữ liệu.`,
+          results: { 
+            total: totalRows,
+            success: 0, 
+            failed: validationErrors.length, 
+            errors: validationErrors 
+          }
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
     
     if (rows.length === 0) {
       return new Response(
         JSON.stringify({ 
           success: false, 
           message: 'File không có dữ liệu hợp lệ',
-          results: { errors }
+          results: { total: 0, success: 0, failed: 0, errors: [] }
         }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
     
-    // Import data in transaction
+    // Import data with detailed error tracking
     const results = {
       total: rows.length,
       success: 0,
       failed: 0,
-      errors: [...errors]
+      errors: [...validationErrors],
+      duplicates: [],
+      dbErrors: []
     };
     
+    console.log(`🚀 Starting import of ${rows.length} records...`);
+    
+    // Process each row
     for (let i = 0; i < rows.length; i++) {
       const rowData = rows[i];
-      const rowIndex = i + 2; // +2 because: 1 for header, 1 for 0-based index
+      const rowIndex = rowData.excelRow;
       
       try {
         await transaction(async (client) => {
-          // Check duplicate
-          const checkResult = await client.query(
-            'SELECT id FROM diplomas WHERE so_hieu_vbcc = $1 AND is_active = TRUE',
+          // Check duplicate so_hieu_vbcc
+          const checkSoHieu = await client.query(
+            'SELECT id, ho_va_ten FROM diplomas WHERE so_hieu_vbcc = $1 AND is_active = TRUE',
             [rowData.so_hieu_vbcc]
           );
           
-          if (checkResult.rows.length > 0) {
-            throw new Error(`Số hiệu "${rowData.so_hieu_vbcc}" đã tồn tại`);
+          if (checkSoHieu.rows.length > 0) {
+            throw new Error(`DUPLICATE|Số hiệu "${rowData.so_hieu_vbcc}" đã tồn tại (thuộc về: ${checkSoHieu.rows[0].ho_va_ten})`);
+          }
+          
+          // Check duplicate ma_nguoi_hoc for same year and major
+          const checkMaSV = await client.query(
+            `SELECT id, ho_va_ten, so_hieu_vbcc 
+             FROM diplomas 
+             WHERE ma_nguoi_hoc = $1 
+             AND nam_tot_nghiep = $2 
+             AND ma_nganh_dao_tao = $3 
+             AND is_active = TRUE`,
+            [rowData.ma_nguoi_hoc, rowData.nam_tot_nghiep, rowData.ma_nganh_dao_tao]
+          );
+          
+          if (checkMaSV.rows.length > 0) {
+            throw new Error(`DUPLICATE|Mã sinh viên "${rowData.ma_nguoi_hoc}" đã có văn bằng năm ${rowData.nam_tot_nghiep} ngành ${rowData.ma_nganh_dao_tao} (Số hiệu: ${checkMaSV.rows[0].so_hieu_vbcc})`);
           }
           
           // Generate UUID
@@ -389,6 +550,10 @@ export async function POST(request) {
           const ngayQD = parseVNDateToISO(rowData.ngay_quyet_dinh_cong_nhan_tot_nghiep);
           const ngayCap = parseVNDateToISO(rowData.ngay_cap_vbcc);
           const ngayNhapHoc = rowData.ngay_nhap_hoc ? parseVNDateToISO(rowData.ngay_nhap_hoc) : null;
+          
+          if (!ngaySinh || !ngayQD || !ngayCap) {
+            throw new Error('DATE_ERROR|Lỗi chuyển đổi ngày tháng');
+          }
           
           // Insert diploma
           await client.query(`
@@ -430,15 +595,48 @@ export async function POST(request) {
         
         results.success++;
         
+        // Log progress every 50 records
+        if (results.success % 50 === 0) {
+          console.log(`✅ Imported ${results.success}/${rows.length} records...`);
+        }
+        
       } catch (error) {
         results.failed++;
-        results.errors.push({
+        
+        const errorMessage = error.message || 'Lỗi không xác định';
+        const errorType = errorMessage.split('|')[0];
+        const errorDetail = errorMessage.split('|')[1] || errorMessage;
+        
+        const errorRecord = {
           row: rowIndex,
-          data: rowData.so_hieu_vbcc,
-          message: error.message
-        });
+          so_hieu: rowData.so_hieu_vbcc,
+          ma_sv: rowData.ma_nguoi_hoc,
+          ho_ten: rowData.ho_va_ten,
+          error: errorDetail,
+          type: errorType
+        };
+        
+        // Categorize errors
+        if (errorType === 'DUPLICATE') {
+          results.duplicates.push(errorRecord);
+        } else if (errorType === 'DATE_ERROR') {
+          results.errors.push(errorRecord);
+        } else {
+          results.dbErrors.push(errorRecord);
+        }
+        
+        console.error(`❌ Row ${rowIndex} failed: ${errorDetail}`);
       }
     }
+    
+    console.log(`✨ Import completed: ${results.success} success, ${results.failed} failed`);
+    
+    // Combine all errors for response
+    const allErrors = [
+      ...results.errors,
+      ...results.duplicates,
+      ...results.dbErrors
+    ];
     
     // Clear cache after successful import
     if (results.success > 0) {
@@ -460,21 +658,47 @@ export async function POST(request) {
       { 
         total: results.total, 
         success: results.success, 
-        failed: results.failed 
+        failed: results.failed,
+        validationErrors: validationErrors.length,
+        duplicates: results.duplicates.length,
+        dbErrors: results.dbErrors.length
       },
-      `Import ${results.success} văn bằng từ Excel`,
+      `Import ${results.success}/${results.total} văn bằng từ Excel`,
       ipAddress
     );
     
-    // Return results
-    const message = results.failed === 0
-      ? `Import thành công ${results.success} văn bằng! 🎉`
-      : `Import hoàn tất: ${results.success} thành công, ${results.failed} thất bại`;
+    // Generate detailed message
+    let message = '';
+    if (results.failed === 0) {
+      message = `🎉 Import thành công ${results.success} văn bằng!`;
+    } else {
+      message = `Import hoàn tất: ${results.success} thành công, ${results.failed} thất bại`;
+      
+      if (validationErrors.length > 0) {
+        message += `\n- ${validationErrors.length} dòng lỗi validation`;
+      }
+      if (results.duplicates.length > 0) {
+        message += `\n- ${results.duplicates.length} dòng trùng lặp`;
+      }
+      if (results.dbErrors.length > 0) {
+        message += `\n- ${results.dbErrors.length} dòng lỗi database`;
+      }
+    }
     
     return new Response(JSON.stringify({
       success: true,
       message,
-      results
+      results: {
+        total: results.total,
+        success: results.success,
+        failed: results.failed,
+        errors: allErrors,
+        summary: {
+          validationErrors: validationErrors.length,
+          duplicates: results.duplicates.length,
+          dbErrors: results.dbErrors.length
+        }
+      }
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
