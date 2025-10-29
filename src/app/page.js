@@ -1,13 +1,15 @@
 // src/app/page.js - Updated for Schema v2.0
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   GoogleReCaptchaProvider,
   useGoogleReCaptcha,
 } from "react-google-recaptcha-v3";
 
 function SearchForm() {
+  const resultRef = useRef(null);
+  const detailRef = useRef(null);
   const [searchType, setSearchType] = useState("so_hieu"); // 'so_hieu' hoặc 'combo'
 
   // Form data
@@ -23,6 +25,23 @@ function SearchForm() {
   const [showDetail, setShowDetail] = useState(false);
 
   const { executeRecaptcha } = useGoogleReCaptcha();
+
+  useEffect(() => {
+  if (result && resultRef.current) {
+    resultRef.current.scrollIntoView({ 
+      behavior: 'smooth', 
+      block: 'start' 
+    });
+  }
+
+  if (showDetail && detailRef.current) {
+    detailRef.current.scrollIntoView({ 
+      behavior: 'smooth', 
+      block: 'start' 
+    });
+  }
+
+}, [result,showDetail]);
 
   const formatDate = (isoString) => {
   if (!isoString) return "Chưa cập nhật";
@@ -377,7 +396,7 @@ function SearchForm() {
 
         {/* Error message */}
         {error && !loading && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+          <div ref={resultRef} className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-800">
                 Kết quả tra cứu
@@ -411,7 +430,7 @@ function SearchForm() {
 
         {/* Success result */}
         {result && !loading && (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+          <div ref={resultRef} className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-800">
                 Kết quả tra cứu
@@ -534,7 +553,7 @@ function SearchForm() {
 
               {/* Thông tin chi tiết */}
               {showDetail && (
-                <div className="mt-6 pt-6 border-t border-gray-200">
+                <div ref={detailRef} className="mt-6 pt-6 border-t border-gray-200">
                   <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
                     <div className="flex items-start">
                       <svg

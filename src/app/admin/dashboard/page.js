@@ -29,7 +29,7 @@ export default function AdminDashboard() {
   const [editingDiploma, setEditingDiploma] = useState(null);
   const [diplomasPagination, setDiplomasPagination] = useState({
     page: 1,
-    limit: 20,
+    limit: 10,
     total: 0,
     totalPages: 0
   });
