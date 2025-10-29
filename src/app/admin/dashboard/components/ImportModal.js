@@ -44,6 +44,7 @@ export default function ImportModal({
         setShowErrorDetails(true);
       }
     }
+    return result;
   };
 
   const downloadErrorReport = () => {

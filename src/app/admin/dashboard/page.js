@@ -250,72 +250,84 @@ export default function AdminDashboard() {
         toast.error('Vui lòng chọn file Excel (.xlsx hoặc .xls)');
         return;
       }
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('File quá lớn! Vui lòng chọn file nhỏ hơn 5MB');
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('File quá lớn! Vui lòng chọn file nhỏ hơn 10MB');
         return;
       }
       setImportFile(file);
     }
   };
 
+  // ✅ UPDATED: Return full result object to ImportModal
   const handleImport = async () => {
     if (!importFile) {
       toast.error('Vui lòng chọn file Excel');
-      return;
+      return null;
     }
+    
     setImporting(true);
-    const formData = new FormData();
-    formData.append('file', importFile);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
 
-    toast.promise(
-      (async () => {
-        const response = await fetch('/api/admin/import', { method: 'POST', body: formData });
-        if (await handleApiError(response)) throw new Error('Session expired');
-        const data = await response.json();
-        if (data.success) {
-          setShowImportModal(false);
-          setImportFile(null);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-          loadDiplomas();
-          if (data.results.failed > 0) {
-            return { message: data.message, showErrors: true, errors: data.results.errors };
-          }
-          return data.message;
-        } else {
-          throw new Error(data.message || 'Import thất bại');
-        }
-      })(),
-      {
-        loading: 'Đang import dữ liệu...',
-        success: (result) => {
-          if (result.showErrors) {
-            setTimeout(() => {
-              toast.error(
-                <div className="max-h-48 overflow-y-auto">
-                  <p className="font-semibold mb-2">Có {result.errors.length} lỗi:</p>
-                  {result.errors.slice(0, 5).map((err, idx) => (
-                    <p key={idx} className="text-xs">Dòng {err.row}: {err.message}</p>
-                  ))}
-                  {result.errors.length > 5 && (
-                    <p className="text-xs mt-1 italic">... và {result.errors.length - 5} lỗi khác</p>
-                  )}
-                </div>,
-                { duration: 10000 }
-              );
-            }, 500);
-          }
-          return result.message || 'Import thành công! 📊';
-        },
-        error: (err) => err.message === 'Session expired' ? '' : (err.message || 'Import thất bại'),
-        finally: () => setImporting(false)
+      const response = await fetch('/api/admin/import', { 
+        method: 'POST', 
+        body: formData 
+      });
+      
+      if (await handleApiError(response)) {
+        setImporting(false);
+        return null;
       }
-    );
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Reload diplomas list if any records were imported successfully
+        if (data.results.success > 0) {
+          loadDiplomas();
+        }
+        
+        // Show success toast only if ALL records imported successfully
+        if (data.results.failed === 0) {
+          toast.success(data.message);
+        }
+        
+        // Return the full result to ImportModal for detailed display
+        return data;
+        
+      } else {
+        toast.error(data.message || 'Import thất bại');
+        return data;
+      }
+      
+    } catch (error) {
+      console.error('Import error:', error);
+      toast.error('Lỗi khi import: ' + error.message);
+      return null;
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // ✅ UPDATED: Close modal and reset state properly
+  const handleCloseImportModal = () => {
+    setShowImportModal(false);
+    setImportFile(null);
+    setImporting(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 font-medium">Đang tải...</p>
+        </div>
       </div>
     );
   }
@@ -376,6 +388,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        {/* Diploma Modal */}
         {showModal && (
           <DiplomaModal
             diploma={editingDiploma}
@@ -387,6 +400,7 @@ export default function AdminDashboard() {
           />
         )}
 
+        {/* Import Modal - Now receives full result object */}
         {showImportModal && (
           <ImportModal
             file={importFile}
@@ -395,11 +409,7 @@ export default function AdminDashboard() {
             onFileSelect={handleFileSelect}
             onDownloadTemplate={handleDownloadTemplate}
             onImport={handleImport}
-            onClose={() => {
-              setShowImportModal(false);
-              setImportFile(null);
-              if (fileInputRef.current) fileInputRef.current.value = '';
-            }}
+            onClose={handleCloseImportModal}
           />
         )}
       </div>
